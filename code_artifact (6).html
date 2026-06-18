@@ -1,0 +1,3188 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>臨床全時序圖表展開與動態縮放系統</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+        }
+        /* 呼吸燈警示效果 */
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(239, 68, 68, 0.4); box-shadow: 0 0 0 0px rgba(239, 68, 68, 0.2); }
+            50% { border-color: rgba(239, 68, 68, 1); box-shadow: 0 0 12px 4px rgba(239, 68, 68, 0.3); }
+        }
+        .animate-pulse-border {
+            animation: pulse-border 2s infinite;
+        }
+        /* 窄版精緻滾動條設計 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* 圖表卡片過渡動畫 */
+        .chart-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* 節點點擊與懸停手勢 */
+        .chart-point {
+            transition: r 0.15s ease, fill 0.15s ease;
+        }
+        .chart-point:hover {
+            r: 6.5px;
+            cursor: pointer;
+            filter: drop-shadow(0px 0px 4px rgba(0,0,0,0.35));
+        }
+        /* 趨勢線 Hover 動效 */
+        .interactive-line {
+            transition: stroke-width 0.2s ease, opacity 0.3s ease;
+            cursor: pointer;
+        }
+        .interactive-line:hover {
+            stroke-width: 4px !important;
+        }
+        .interactive-hit-area {
+            fill: none;
+            stroke: transparent;
+            stroke-width: 14;
+            pointer-events: stroke;
+            cursor: pointer;
+        }
+        .chart-zoom-launch-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            z-index: 12;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            border-radius: 9999px;
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            background: rgba(255, 255, 255, 0.92);
+            color: #334155;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+            transition: transform 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+        }
+        .chart-zoom-launch-btn:hover {
+            transform: scale(1.05);
+            background: rgba(239, 246, 255, 0.98);
+            color: #1d4ed8;
+        }
+        .chart-zoom-launch-btn:active {
+            transform: scale(0.97);
+        }
+        .chart-zoom-clone {
+            width: min(1180px, 92vw);
+            max-width: none;
+            border-radius: 20px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .chart-zoom-clone .chart-zoom-launch-btn {
+            display: none !important;
+        }
+        .chart-zoom-clone .chart-tooltip {
+            padding: 12px 14px;
+            border-radius: 12px;
+            font-size: 15px;
+        }
+        .chart-zoom-clone .chart-tooltip .tooltip-title {
+            font-size: 15px;
+        }
+        .chart-zoom-clone .chart-tooltip .tooltip-content {
+            font-size: 15px;
+            line-height: 1.65;
+        }
+        .chart-zoom-clone,
+        .chart-zoom-clone * {
+            -webkit-user-drag: none;
+        }
+        .chart-zoom-source {
+            position: relative;
+        }
+        .chart-zoom-viewport {
+            cursor: grab;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .chart-zoom-viewport.dragging {
+            cursor: grabbing;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 lg:h-screen lg:overflow-hidden flex flex-col">
+
+    <!-- 頂部導航列 -->
+    <header class="bg-white border-b border-slate-200 flex-shrink-0 px-4 lg:px-5 py-3 flex justify-between items-center shadow-sm z-30">
+        <div class="w-full flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-600 text-white p-2 rounded-lg">
+                    <i data-lucide="activity" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                        竹馬智護行動 - 進階UI <span class="text-xs bg-blue-100 text-blue-800 font-medium px-2 py-0.5 rounded-full">AI Co-Pilot v3.6-Interactive</span>
+                    </h1>
+                    <p class="text-xs text-slate-500">26 支 API 整合 • 2:1 寬左窄右版型 • 點擊單一趨勢線自動重繪 Y 軸與刻度縮放</p>
+                </div>
+            </div>
+
+            <!-- 右側交班視角選擇 -->
+            <div class="flex items-center space-x-3">
+                <span class="text-xs text-slate-500 font-medium">交班視角:</span>
+                <select id="role-select" onchange="toggleRoleView()" class="text-xs bg-white border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="nurse">護理師交班</option>
+                    <option value="doctor">醫師/住院醫交班</option>
+                </select>
+                <button onclick="window.print()" class="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition" title="列印交班單">
+                    <i data-lucide="printer" class="w-4.5 h-4.5"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要內容區 (最大寬度限制，100% 滿版高度) -->
+    <main class="flex-1 min-h-0 p-4 lg:p-5 flex flex-col space-y-5 w-full">
+
+        <!-- 病人基本資料與警示標籤 -->
+        <section class="flex-shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full">
+            <div class="flex flex-col">
+                <!-- 上方：病人基本資料 (API 1) -->
+                <div class="p-5 bg-gradient-to-br from-slate-950 to-slate-850 text-white flex flex-col gap-4 relative">
+                    <div class="absolute top-4 right-4 bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs px-2.5 py-1 rounded-md font-semibold">
+                        3B02-05 床 (一般外科)
+                    </div>
+                    <div class="flex items-center space-x-4 pr-28">
+                        <div class="w-14 h-14 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl font-bold text-slate-100 shadow-inner">
+                            王
+                        </div>
+                        <div class="flex-1 space-y-2">
+                            <div class="flex items-center flex-wrap gap-x-2 gap-y-1">
+                                <h2 class="text-xl font-bold tracking-tight">王*明</h2>
+                                <span class="text-xs text-slate-400">男性, 68歲</span>
+                            </div>
+                            <div class="flex flex-wrap gap-2 text-[11px]">
+                                <span class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/45 px-2.5 py-1 text-slate-300">
+                                    <i data-lucide="hash" class="w-3 h-3 text-slate-450"></i> 病歷號: 1024***8
+                                </span>
+                                <span class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/45 px-2.5 py-1 text-slate-300">
+                                    <i data-lucide="credit-card" class="w-3 h-3 text-slate-450"></i> 身分證: A12******9
+                                </span>
+                                <span class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/45 px-2.5 py-1 text-slate-300">
+                                    <i data-lucide="user" class="w-3 h-3 text-slate-455"></i> 主治醫師: <b>林大華 醫師</b>
+                                </span>
+                                <span class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/45 px-2.5 py-1 text-slate-300">
+                                    <i data-lucide="calendar-days" class="w-3 h-3 text-slate-450"></i> 入院: 2026-06-09
+                                </span>
+                                <span class="inline-flex items-center gap-1 rounded-lg border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 font-semibold text-blue-300">
+                                    <i data-lucide="calendar" class="w-3 h-3"></i> 已住院 8 天
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 下方：高警示臨床標籤 (API 2, 4, 6, 24, 26) -->
+                <div class="p-4 lg:p-5 flex flex-col gap-3 border-t border-slate-200">
+                    <div class="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-3">
+                        <div class="xl:w-32 xl:flex-shrink-0">
+                            <h3 class="text-[11px] font-bold text-slate-450 uppercase tracking-wider">高警示臨床標籤 (API Tags)</h3>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-50 text-orange-800 border border-orange-200">
+                                <span class="w-2 h-2 rounded-full bg-orange-500"></span>
+                                傳染病: VRE (+)
+                            </span>
+                            
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-50 text-purple-800 border border-purple-200 cursor-help transition hover:bg-purple-100/50" onclick="highlightAllergy()">
+                                <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-purple-500"></i>
+                                過敏: Penicillin (皮疹)
+                            </span>
+
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                                <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-amber-500"></i>
+                                跌倒高風險 (Morse: 65)
+                            </span>
+
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-850 border border-red-200 animate-pulse-border">
+                                <i data-lucide="shield-off" class="w-3.5 h-3.5 text-red-600"></i>
+                                重大註記: 家屬曾有言語衝突紀錄
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- API 26: 針扎高危險群 -->
+                    <div class="pt-3 border-t border-slate-100 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+                        <div class="flex items-center space-x-2.5 min-w-0">
+                            <div class="p-1.5 bg-rose-100 text-rose-700 rounded-lg">
+                                <i data-lucide="droplet" class="w-4 h-4"></i>
+                            </div>
+                            <div class="min-w-0">
+                                <h4 class="text-xs font-bold text-slate-900">針扎高危險資訊安全區 (API 26)</h4>
+                                <p class="text-[10px] text-slate-550">涉及病毒性傳染高風險註記，限直接臨床照護醫護人員開啟</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex flex-wrap items-center gap-3">
+                            <div id="needle-privacy-box" class="hidden px-2.5 py-1.5 bg-rose-50 border border-rose-100 rounded-lg text-[11px] text-rose-800 flex items-center gap-1.5">
+                                <i data-lucide="alert-circle" class="w-3.5 h-3.5 text-rose-600 flex-shrink-0"></i>
+                                <span><b>HBV (+) 帶原者</b>，侵入性治療請加戴雙手套。</span>
+                            </div>
+                            <button id="needle-reveal-btn" onclick="toggleNeedlePrivacy()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                                <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                                <span>安全解鎖</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 下方雙欄：2:1 一頁式獨立滾動主區域 -->
+        <div class="flex-1 min-h-0 grid grid-cols-12 gap-6">
+
+            <!-- ================= 左欄：AI 智慧摘要與待辦區 (佔 2/3 寬) ================= -->
+            <section class="col-span-12 lg:col-span-8 h-full flex flex-col min-h-0 min-w-0">
+                <div class="flex-1 overflow-y-auto pr-2 space-y-4">
+                    
+                    <!-- 敘述性文字 AI 摘要區 -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+                        <div class="flex items-center space-x-2 border-b border-slate-100 pb-3">
+                            <div class="p-1.5 bg-violet-100 text-violet-700 rounded-lg">
+                                <i data-lucide="sparkles" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h2 class="text-base font-bold text-slate-900">敘述性文字 AI 智慧摘要</h2>
+                                <p class="text-[11px] text-slate-500">免除頻繁摺疊收合 • 點擊下方高亮連結，右側圖表將自動對應定位並載入特定縮放時序與動態 Y 軸！</p>
+                            </div>
+                        </div>
+
+                        <!-- 展開式病程段落 -->
+                        <div class="space-y-4 text-xs md:text-sm">
+                            
+                            <!-- 區塊一：入院經過 -->
+                            <div class="bg-slate-50/50 rounded-xl p-4 border border-slate-150 space-y-2">
+                                <span class="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                                    <i data-lucide="info" class="w-4 h-4 text-blue-600"></i>
+                                    入院診斷 & 經過 (API 3, 7)
+                                </span>
+                                <div class="leading-relaxed text-slate-655 space-y-1.5 pl-6">
+                                    <p><b>入院診斷：</b> Colon Cancer, Stage III (乙狀結腸癌第三期)</p>
+                                    <p><b>住院經過：</b> 於 6/11 進行 <b>乙狀結腸部分切除術 (API 5)</b>。術後恢復平穩。今日晨間患者出現 <span class="bg-red-100 text-red-900 px-1.5 py-0.5 rounded font-extrabold cursor-pointer border-b-2 border-red-500 hover:bg-red-200 transition" onclick="focusAndExpandChart('tpr', 'week', 'bt')">體溫急劇攀升至 38.2°C (API 8) ⚠️ (點擊查看一週體溫專屬 Y 軸)</span> 伴隨輕微畏寒。目前已完成血液培養，並開立 Kefzol 抗生素治療。</p>
+                                </div>
+                            </div>
+
+                            <!-- 區塊二：健康問題與傷口 -->
+                            <div class="bg-slate-50/50 rounded-xl p-4 border border-slate-150 space-y-2">
+                                <span class="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                                    <i data-lucide="heart-pulse" class="w-4 h-4 text-rose-500"></i>
+                                    健康問題、護理指導 & 皮膚黏膜 (API 21, 22)
+                                </span>
+                                <div class="leading-relaxed text-slate-655 space-y-1.5 pl-6">
+                                    <p><b>健康問題：</b> 急性疼痛（與傷口及拉扯相關，VAS 5分）、潛在性感染。尾骶骨處發現 <span class="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-bold cursor-pointer border-b-2 border-amber-500 hover:bg-amber-200 transition" onclick="focusAndExpandChart('wound', '')">一期壓瘡 2x2 cm ⚠️ (點擊右欄滑至相片紀錄)</span>，已敷貼 Comfeel 減壓敷料，並衛教家屬每 2 小時側翻身防壓迫。</p>
+                                </div>
+                            </div>
+
+                            <!-- 區塊三：血糖控管與檢驗報告 -->
+                            <div class="bg-slate-50/50 rounded-xl p-4 border border-slate-150 space-y-2">
+                                <span class="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                                    <i data-lucide="flask-conical" class="w-4 h-4 text-emerald-600"></i>
+                                    血糖與檢驗整合分析 (API 11, 12)
+                                </span>
+                                <div class="leading-relaxed text-slate-655 space-y-1.5 pl-6">
+                                    <div class="bg-blue-50 border border-blue-100 p-2.5 rounded-lg mb-2 flex items-start gap-2">
+                                        <i data-lucide="brain" class="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"></i>
+                                        <p class="text-xs text-blue-950 font-medium"><b>AI 聯合臨床評估：</b>今日飯前血糖大幅攀升，與 WBC 發炎指標上升高度重合。考慮為急性感染所誘發之應激性高血糖。</p>
+                                    </div>
+                                    <p><b>血糖控制 (DMsheet)：</b> 早上 07:00 血糖值為 <span class="bg-red-100 text-red-900 px-1.5 py-0.5 rounded font-bold cursor-pointer border-b-2 border-red-500 hover:bg-red-200 transition" onclick="focusAndExpandChart('sugar', '3days')">280 mg/dL (API 11) ⚠️ (點擊查看3天內血糖趨勢)</span>，已依 Sliding Scale 皮下注射速效 RI 8U。</p>
+                                    <p><b>檢驗報告：</b> 最新白血球數 <span class="bg-red-100 text-red-900 px-1.5 py-0.5 rounded font-bold cursor-pointer border-b-2 border-red-500 hover:bg-red-200 transition" onclick="focusAndExpandChart('lab', 'full')">WBC: 14,200/uL (API 12) ⚠️ (點擊查看全程檢驗對比)</span>，CRP 急升至 4.2 mg/dL。</p>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <!-- 臨床待辦事項 & 備註 -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                                <i data-lucide="bell-ring" class="w-4 h-4 text-blue-600"></i> 臨床待辦事項 & 備註 (API 23, 25)
+                            </h3>
+                            <span class="text-[10px] bg-rose-100 text-rose-700 font-semibold px-2 py-0.5 rounded-full">3 事項待處置</span>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                            <div class="p-3 bg-blue-50/60 border border-blue-100 rounded-xl flex items-start space-x-3 hover:bg-blue-100/50 transition">
+                                <div class="p-1.5 bg-blue-100 text-blue-700 rounded-lg mt-0.5">
+                                    <i data-lucide="bed" class="w-3.5 h-3.5"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <div class="flex justify-between items-center">
+                                        <h4 class="font-bold text-blue-950">轉床預約 (API 25)</h4>
+                                        <span class="text-[9px] bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded font-bold">下午 14:00</span>
+                                    </div>
+                                    <p class="text-[11px] text-blue-850 mt-1">預約 <b>8B 單人房 (8B12)</b>，已核實空床。請協助整理物品並通知長女。</p>
+                                </div>
+                            </div>
+
+                            <div class="p-3 bg-amber-50/60 border border-amber-100 rounded-xl flex items-start space-x-3 hover:bg-amber-100/50 transition">
+                                <div class="p-1.5 bg-amber-100 text-amber-700 rounded-lg mt-0.5">
+                                    <i data-lucide="git-commit" class="w-3.5 h-3.5"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <h4 class="font-bold text-amber-950">導尿管 Foley 拆除預警</h4>
+                                    <p class="text-[11px] text-amber-850 mt-1">留置導尿管已置入 <b>13 天</b> (上限14天)，預計明日 (6/18) 安排拔除或評估。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- ================= 右欄：臨床圖表時序中控中心 (佔 1/3 寬，完全垂直展開，獨立滾動) ================= -->
+            <section class="col-span-12 lg:col-span-4 h-full flex flex-col min-h-0 min-w-0 relative">
+                
+                <!-- 吸頂迷你錨點導覽列 (Sticky Navigation Dock) -->
+                <div class="bg-white/95 backdrop-blur-md border border-slate-200 p-1.5 rounded-xl flex items-center justify-between gap-2 mb-3 z-20 flex-shrink-0 shadow-sm">
+                    <span class="text-[10px] font-bold text-slate-500 pl-2 flex items-center gap-1">
+                        <i data-lucide="compass" class="w-3 h-3 text-blue-600"></i>
+                        時序定位:
+                    </span>
+                    <div class="flex items-center space-x-1 overflow-x-auto max-w-full">
+                        <button onclick="scrollToMetric('chart-card-tpr')" id="dock-btn-tpr" class="px-2.5 py-1.5 rounded-lg text-[10px] font-bold bg-white text-blue-700 shadow-sm transition whitespace-nowrap">TPR生命</button>
+                        <button onclick="scrollToMetric('chart-card-sugar')" id="dock-btn-sugar" class="px-2.5 py-1.5 rounded-lg text-[10px] text-slate-600 hover:bg-white transition whitespace-nowrap">血糖給藥</button>
+                        <button onclick="scrollToMetric('chart-card-io')" id="dock-btn-io" class="px-2.5 py-1.5 rounded-lg text-[10px] text-slate-600 hover:bg-white transition whitespace-nowrap">I/O出入</button>
+                        <button onclick="scrollToMetric('chart-card-lab')" id="dock-btn-lab" class="px-2.5 py-1.5 rounded-lg text-[10px] text-slate-600 hover:bg-white transition whitespace-nowrap">檢驗趨勢</button>
+                        <button onclick="scrollToMetric('chart-card-wound')" id="dock-btn-wound" class="px-2.5 py-1.5 rounded-lg text-[10px] text-slate-600 hover:bg-white transition whitespace-nowrap">壓瘡時序</button>
+                        <button onclick="scrollToMetric('chart-card-tables')" id="dock-btn-tables" class="px-2.5 py-1.5 rounded-lg text-[10px] text-slate-600 hover:bg-white transition whitespace-nowrap">會診手術</button>
+                        <button onclick="scrollToMetric('chart-card-consult')" id="dock-btn-consult" class="px-2.5 py-1.5 rounded-lg text-[10px] text-slate-600 hover:bg-white transition whitespace-nowrap">會診</button>
+                    </div>
+                </div>
+
+                <!-- 垂直展開中控中心 (滾動容器) -->
+                <div class="flex-1 overflow-y-auto pr-1.5 space-y-4" id="right-scroll-container" onscroll="updateDockHighlight()">
+
+                    <!-- 圖表卡 1: TPR & 疼痛綜合折線圖 -->
+                    <div id="chart-card-tpr" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm chart-card relative overflow-hidden">
+                        
+                        <!-- 局部讀取遮罩 -->
+                        <div id="loading-tpr" class="hidden absolute inset-0 bg-white/90 backdrop-blur-sm z-10 flex flex-col items-center justify-center space-y-2">
+                            <div class="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            <span class="text-[9px] font-bold text-blue-600">AI 載入數據中...</span>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
+                            <div>
+                                <div class="flex items-center gap-1.5">
+                                    <h3 class="text-xs font-bold text-slate-800">TPR 體溫/脈搏/呼吸 & 疼痛分數</h3>
+                                    <button id="tpr-reset-btn" onclick="switchTPRMetric('all')" class="hidden text-[9px] font-bold bg-slate-200 hover:bg-blue-600 hover:text-white text-slate-700 px-1.5 py-0.5 rounded transition">✕ 顯示全部</button>
+                                </div>
+                                <div class="flex items-center gap-1.5 mt-0.5">
+                                    <span id="tpr-range-badge" class="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded font-bold uppercase">當天</span>
+                                    <p id="tpr-range-text" class="text-[9px] text-slate-400">顯示最近 24 小時極細變動 (3 筆)</p>
+                                </div>
+                            </div>
+                            <!-- 專屬時序直切 Tab 控制群組 -->
+                            <div class="flex bg-slate-105 p-0.5 rounded-lg text-[9px] font-semibold space-x-0.5 shadow-inner bg-slate-100">
+                                <button id="tab-tpr-today" onclick="switchChartLevel('tpr', 'today')" class="px-2 py-0.5 rounded transition whitespace-nowrap">當天</button>
+                                <button id="tab-tpr-3days" onclick="switchChartLevel('tpr', '3days')" class="px-2 py-0.5 rounded transition whitespace-nowrap">3天</button>
+                                <button id="tab-tpr-week" onclick="switchChartLevel('tpr', 'week')" class="px-2 py-0.5 rounded transition whitespace-nowrap">一週</button>
+                                <button id="tab-tpr-full" onclick="switchChartLevel('tpr', 'full')" class="px-2 py-0.5 rounded transition whitespace-nowrap">全程</button>
+                            </div>
+                        </div>
+
+                        <!-- 支援 hover 動態跟隨 tooltip -->
+                        <div class="relative bg-slate-50/75 rounded-lg p-2 border border-slate-100">
+                            <!-- 浮動 Tooltip 氣泡 -->
+                            <div class="chart-tooltip absolute hidden bg-slate-900/95 text-white px-2.5 py-1.5 rounded-lg text-[10px] pointer-events-none shadow-lg z-20 transition-opacity duration-150 border border-slate-700/50">
+                                <p class="font-bold text-blue-300 tooltip-title mb-0.5"></p>
+                                <p class="tooltip-content leading-relaxed text-slate-200"></p>
+                            </div>
+
+                            <!-- 提示文字 -->
+                            <div id="tpr-interactive-hint" class="absolute top-1 right-2 text-[8px] text-slate-400 italic pointer-events-none transition-opacity">
+                                💡 點擊任一線段可切換獨立數值與 Y 軸
+                            </div>
+
+                            <svg class="w-full h-auto aspect-[16/10]" viewBox="0 0 300 180" preserveAspectRatio="none">
+                                <line x1="30" y1="20" x2="280" y2="20" stroke="#e2e8f0" stroke-width="0.8" stroke-dasharray="3" />
+                                <line x1="30" y1="65" x2="280" y2="65" stroke="#e2e8f0" stroke-width="0.8" stroke-dasharray="3" />
+                                <line x1="30" y1="110" x2="280" y2="110" stroke="#e2e8f0" stroke-width="0.8" stroke-dasharray="3" />
+                                <line x1="30" y1="150" x2="280" y2="150" stroke="#cbd5e1" stroke-width="1" />
+
+                                <g id="tpr-grid-lines"></g>
+
+                                <!-- 可互動的線段 (添加 interactive-line 樣式與點擊事件) -->
+                                <path id="path-tpr-bt" d="" fill="none" stroke="#ef4444" stroke-width="2.5" class="transition-all duration-500 interactive-line" onclick="switchTPRMetric('bt')" />
+                                <path id="path-tpr-hr" d="" fill="none" stroke="#3b82f6" stroke-width="2" class="transition-all duration-500 interactive-line" onclick="switchTPRMetric('hr')" />
+                                <path id="path-tpr-rr" d="" fill="none" stroke="#10b981" stroke-width="1.8" stroke-dasharray="4,2" class="transition-all duration-500 interactive-line" onclick="switchTPRMetric('rr')" />
+                                <path id="path-tpr-pain" d="" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="2,2" class="transition-all duration-500 interactive-line" onclick="switchTPRMetric('pain')" />
+                                <path id="path-tpr-bt-hit" d="" class="interactive-hit-area" onclick="switchTPRMetric('bt')" />
+                                <path id="path-tpr-hr-hit" d="" class="interactive-hit-area" onclick="switchTPRMetric('hr')" />
+                                <path id="path-tpr-rr-hit" d="" class="interactive-hit-area" onclick="switchTPRMetric('rr')" />
+                                <path id="path-tpr-pain-hit" d="" class="interactive-hit-area" onclick="switchTPRMetric('pain')" />
+
+                                <g id="tpr-dots-group"></g>
+                                <g id="tpr-labels-group"></g>
+
+                                <!-- Y軸動態標記群組 -->
+                                <g id="tpr-y-labels-group"></g>
+                            </svg>
+                        </div>
+                        
+                        <!-- 底部小圖示輔助點擊說明 -->
+                        <div class="flex justify-between items-center text-[9px] text-slate-500 pt-1 border-t border-slate-100">
+                            <span class="flex items-center gap-1 cursor-pointer" onclick="switchTPRMetric('bt')">
+                                <span class="w-2.5 h-1 bg-red-500 inline-block rounded-full"></span> 體溫 (BT)
+                            </span>
+                            <span class="flex items-center gap-1 cursor-pointer" onclick="switchTPRMetric('hr')">
+                                <span class="w-2.5 h-1 bg-blue-500 inline-block rounded-full"></span> 心跳 (HR)
+                            </span>
+                            <span class="flex items-center gap-1 cursor-pointer" onclick="switchTPRMetric('rr')">
+                                <span class="w-2.5 h-1 bg-emerald-500 border-t inline-block"></span> 呼吸 (RR)
+                            </span>
+                            <span class="flex items-center gap-1 cursor-pointer" onclick="switchTPRMetric('pain')">
+                                <span class="w-2.5 h-1 bg-amber-500 border-t border-dashed inline-block"></span> 疼痛分
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- 圖表卡 2: 血糖趨勢與速效胰島素給藥紀錄 -->
+                    <div id="chart-card-sugar" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm chart-card relative overflow-hidden">
+                        
+                        <div id="loading-sugar" class="hidden absolute inset-0 bg-white/90 backdrop-blur-sm z-10 flex flex-col items-center justify-center space-y-2">
+                            <div class="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            <span class="text-[9px] font-bold text-blue-600">AI 正在串接 DMsheet...</span>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
+                            <div>
+                                <h3 class="text-xs font-bold text-slate-800">血糖控制與 RI 注射對齊</h3>
+                                <div class="flex items-center gap-1.5 mt-0.5">
+                                    <span id="sugar-range-badge" class="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded font-bold uppercase">當天</span>
+                                    <p id="sugar-range-text" class="text-[9px] text-slate-400">顯示最近 24 小時血糖波動</p>
+                                </div>
+                            </div>
+                            <!-- 專屬時序直切 Tab 控制群組 -->
+                            <div class="flex bg-slate-105 p-0.5 rounded-lg text-[9px] font-semibold space-x-0.5 shadow-inner bg-slate-100">
+                                <button id="tab-sugar-today" onclick="switchChartLevel('sugar', 'today')" class="px-2 py-0.5 rounded transition whitespace-nowrap">當天</button>
+                                <button id="tab-sugar-3days" onclick="switchChartLevel('sugar', '3days')" class="px-2 py-0.5 rounded transition whitespace-nowrap">3天</button>
+                                <button id="tab-sugar-week" onclick="switchChartLevel('sugar', 'week')" class="px-2 py-0.5 rounded transition whitespace-nowrap">一週</button>
+                                <button id="tab-sugar-full" onclick="switchChartLevel('sugar', 'full')" class="px-2 py-0.5 rounded transition whitespace-nowrap">全程</button>
+                            </div>
+                        </div>
+
+                        <div class="relative bg-slate-50/75 rounded-lg p-2 border border-slate-100 flex flex-col justify-between">
+                            <!-- 浮動 Tooltip 氣泡 -->
+                            <div class="chart-tooltip absolute hidden bg-slate-900/95 text-white px-2.5 py-1.5 rounded-lg text-[10px] pointer-events-none shadow-lg z-20 transition-opacity duration-150 border border-slate-700/50">
+                                <p class="font-bold text-blue-300 tooltip-title mb-0.5"></p>
+                                <p class="tooltip-content leading-relaxed text-slate-200"></p>
+                            </div>
+
+                            <svg class="w-full h-auto aspect-[16/8]" viewBox="0 0 300 130" preserveAspectRatio="none">
+                                <rect x="30" y="45" width="250" height="40" fill="#10b981" fill-opacity="0.08" />
+                                <line x1="30" y1="45" x2="280" y2="45" stroke="#10b981" stroke-width="0.6" stroke-dasharray="2,2" stroke-opacity="0.4" />
+                                <line x1="30" y1="85" x2="280" y2="85" stroke="#10b981" stroke-width="0.6" stroke-dasharray="2,2" stroke-opacity="0.4" />
+
+                                <path id="path-sugar" d="" fill="none" stroke="#6366f1" stroke-width="2.5" class="transition-all duration-500" />
+                                
+                                <g id="sugar-dots-group"></g>
+                                <g id="sugar-labels-group"></g>
+
+                                <text x="25" y="25" font-size="7" fill="#64748b" text-anchor="end">280</text>
+                                <text x="25" y="65" font-size="7" fill="#10b981" text-anchor="end">140</text>
+                                <text x="25" y="105" font-size="7" fill="#64748b" text-anchor="end">80</text>
+                            </svg>
+                            <div class="pt-2 mt-2 border-t border-slate-200">
+                                <div id="sugar-timeline-grid" class="grid grid-cols-4 gap-1 text-center text-[9px] text-slate-500 font-medium"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 圖表卡 3: I/O 每日出入量平衡 -->
+                    <div id="chart-card-io" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm chart-card relative overflow-hidden">
+                        
+                        <div id="loading-io" class="hidden absolute inset-0 bg-white/90 backdrop-blur-sm z-10 flex flex-col items-center justify-center space-y-2">
+                            <div class="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            <span class="text-[9px] font-bold text-blue-600">AI 載入數據中...</span>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
+                            <div>
+                                <h3 class="text-xs font-bold text-slate-800">I/O 每日出入平衡 (API 10)</h3>
+                                <div class="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                    <span id="io-range-badge" class="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded font-bold uppercase">當天</span>
+                                    <p id="io-range-text" class="text-[9px] text-slate-400">藍條：入量 • 橘條：出量</p>
+                                    <div id="io-color-legend" class="flex items-center gap-2 text-[9px] text-slate-500">
+                                        <span class="inline-flex items-center gap-1">
+                                            <span class="w-2.5 h-2.5 rounded-sm bg-blue-500"></span>
+                                            入量
+                                        </span>
+                                        <span class="inline-flex items-center gap-1">
+                                            <span class="w-2.5 h-2.5 rounded-sm bg-orange-500"></span>
+                                            出量
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- 專屬時序直切 Tab 控制群組 -->
+                            <div class="flex bg-slate-105 p-0.5 rounded-lg text-[9px] font-semibold space-x-0.5 shadow-inner bg-slate-100">
+                                <button id="tab-io-today" onclick="switchChartLevel('io', 'today')" class="px-2 py-0.5 rounded transition whitespace-nowrap">當天</button>
+                                <button id="tab-io-3days" onclick="switchChartLevel('io', '3days')" class="px-2 py-0.5 rounded transition whitespace-nowrap">3天</button>
+                                <button id="tab-io-week" onclick="switchChartLevel('io', 'week')" class="px-2 py-0.5 rounded transition whitespace-nowrap">一週</button>
+                                <button id="tab-io-full" onclick="switchChartLevel('io', 'full')" class="px-2 py-0.5 rounded transition whitespace-nowrap">全程</button>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-50/75 rounded-lg p-2 border border-slate-100 relative">
+                            <!-- 浮動 Tooltip 氣泡 -->
+                            <div class="chart-tooltip absolute hidden bg-slate-900/95 text-white px-2.5 py-1.5 rounded-lg text-[10px] pointer-events-none shadow-lg z-20 transition-opacity duration-150 border border-slate-700/50">
+                                <p class="font-bold text-blue-300 tooltip-title mb-0.5"></p>
+                                <p class="tooltip-content leading-relaxed text-slate-200"></p>
+                            </div>
+
+                            <svg class="w-full h-auto aspect-[16/9]" viewBox="0 0 300 130" preserveAspectRatio="none">
+                                <line x1="30" y1="20" x2="280" y2="20" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="3" />
+                                <line x1="30" y1="60" x2="280" y2="60" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="3" />
+                                <line x1="30" y1="100" x2="280" y2="100" stroke="#cbd5e1" stroke-width="1" />
+                                <g id="io-grid-lines"></g>
+                                <g id="io-y-labels"></g>
+                                <g id="io-bars-group"></g>
+                                <g id="io-bar-value-labels"></g>
+                                <g id="io-x-labels"></g>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- 圖表卡 4: WBC / CRP 檢驗發炎趨勢 -->
+                    <div id="chart-card-lab" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm chart-card relative overflow-hidden">
+                        
+                        <div id="loading-lab" class="hidden absolute inset-0 bg-white/90 backdrop-blur-sm z-10 flex flex-col items-center justify-center space-y-2">
+                            <div class="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                            <span class="text-[9px] font-bold text-blue-600">AI 載入數據中...</span>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-2 gap-2">
+                            <div>
+                                <h3 class="text-xs font-bold text-slate-800">WBC & CRP 發炎指數監控</h3>
+                                <div class="flex items-center gap-1.5 mt-0.5">
+                                    <span id="lab-range-badge" class="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded font-bold uppercase">當天</span>
+                                    <p id="lab-range-text" class="text-[9px] text-slate-400">綠色實線：WBC • 紫色虛線：CRP</p>
+                                </div>
+                            </div>
+                            <!-- 專屬時序直切 Tab 控制群組 -->
+                            <div class="flex bg-slate-105 p-0.5 rounded-lg text-[9px] font-semibold space-x-0.5 shadow-inner bg-slate-100">
+                                <button id="tab-lab-today" onclick="switchChartLevel('lab', 'today')" class="px-2 py-0.5 rounded transition whitespace-nowrap">當天</button>
+                                <button id="tab-lab-3days" onclick="switchChartLevel('lab', '3days')" class="px-2 py-0.5 rounded transition whitespace-nowrap">3天</button>
+                                <button id="tab-lab-week" onclick="switchChartLevel('lab', 'week')" class="px-2 py-0.5 rounded transition whitespace-nowrap">一週</button>
+                                <button id="tab-lab-full" onclick="switchChartLevel('lab', 'full')" class="px-2 py-0.5 rounded transition whitespace-nowrap">全程</button>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-50/75 rounded-lg p-2 border border-slate-100 relative">
+                            <!-- 浮動 Tooltip 氣泡 -->
+                            <div class="chart-tooltip absolute hidden bg-slate-900/95 text-white px-2.5 py-1.5 rounded-lg text-[10px] pointer-events-none shadow-lg z-20 transition-opacity duration-150 border border-slate-700/50">
+                                <p class="font-bold text-blue-300 tooltip-title mb-0.5"></p>
+                                <p class="tooltip-content leading-relaxed text-slate-200"></p>
+                            </div>
+
+                            <svg class="w-full h-auto aspect-[16/10]" viewBox="0 0 300 150" preserveAspectRatio="none">
+                                <text x="32" y="14" font-size="7" fill="#10b981" font-weight="700">WBC (/uL)</text>
+                                <line x1="30" y1="18" x2="280" y2="18" stroke="#d1fae5" stroke-width="0.8" stroke-dasharray="3" />
+                                <line x1="30" y1="38" x2="280" y2="38" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="3" />
+                                <line x1="30" y1="58" x2="280" y2="58" stroke="#bbf7d0" stroke-width="0.9" />
+
+                                <text x="32" y="74" font-size="7" fill="#8b5cf6" font-weight="700">CRP (mg/dL)</text>
+                                <line x1="30" y1="78" x2="280" y2="78" stroke="#ede9fe" stroke-width="0.8" stroke-dasharray="3" />
+                                <line x1="30" y1="98" x2="280" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="3" />
+                                <line x1="30" y1="118" x2="280" y2="118" stroke="#ddd6fe" stroke-width="0.9" />
+
+                                <g id="lab-grid-lines"></g>
+                                <g id="lab-wbc-y-labels"></g>
+                                <g id="lab-crp-y-labels"></g>
+
+                                <path id="path-lab-wbc" d="" fill="none" stroke="#10b981" stroke-width="2.5" class="transition-all duration-500" />
+                                <path id="path-lab-crp" d="" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="3,2" class="transition-all duration-500" />
+
+                                <g id="lab-wbc-dots-group"></g>
+                                <g id="lab-crp-dots-group"></g>
+                                <g id="lab-labels-group"></g>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- 圖表卡 5: 壓瘡傷口相片與評估時序紀錄 -->
+                    <div id="chart-card-wound" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm chart-card">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-2 mb-2">
+                            <div>
+                                <h3 class="text-xs font-bold text-slate-800">一期壓瘡時序影像追蹤</h3>
+                                <p class="text-[9px] text-slate-400">尾骶骨 2x2 cm 敷料與翻身護理對照</p>
+                            </div>
+                            <span class="text-[9px] bg-emerald-50 text-emerald-700 font-bold px-1.5 py-0.5 rounded">邊緣好轉</span>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-2">
+                            <div class="border border-slate-200 rounded p-1 bg-slate-50 text-center space-y-1 hover:scale-105 transition-transform duration-200">
+                                <span class="bg-slate-900/80 text-white px-1 py-0.2 rounded text-[7px] block">6/13</span>
+                                <svg class="w-8 h-8 mx-auto" viewBox="0 0 100 100">
+                                    <circle cx="50" cy="50" r="30" fill="#ffe4e6" stroke="#f43f5e" stroke-dasharray="2,2" />
+                                    <path d="M42,40 Q48,32 55,42 T68,52 T52,65 T38,48 Z" fill="#fda4af" opacity="0.65" />
+                                </svg>
+                                <p class="text-[8px] font-bold text-slate-650">3x2.5 cm</p>
+                            </div>
+                            <div class="border border-slate-200 rounded p-1 bg-slate-50 text-center space-y-1 hover:scale-105 transition-transform duration-200">
+                                <span class="bg-slate-900/80 text-white px-1 py-0.2 rounded text-[7px] block">6/15</span>
+                                <svg class="w-8 h-8 mx-auto" viewBox="0 0 100 100">
+                                    <circle cx="50" cy="50" r="30" fill="#ffe4e6" stroke="#f43f5e" stroke-dasharray="2,2" />
+                                    <path d="M44,43 Q49,38 53,44 T60,49 T51,57 T42,49 Z" fill="#fecdd3" opacity="0.7" />
+                                </svg>
+                                <p class="text-[8px] font-bold text-slate-655">2.2x2 cm</p>
+                            </div>
+                            <div class="border border-blue-500 rounded p-1 bg-blue-50/20 text-center space-y-1 hover:scale-105 transition-transform duration-200 shadow-sm">
+                                <span class="bg-blue-600 text-white px-1 py-0.2 rounded text-[7px] font-bold block">今日</span>
+                                <svg class="w-8 h-8 mx-auto" viewBox="0 0 100 100">
+                                    <circle cx="50" cy="50" r="30" fill="#ffe4e6" stroke="#f43f5e" stroke-dasharray="2,2" />
+                                    <path d="M46,45 Q48,43 51,45 T54,48 T50,52 T47,48 Z" fill="#ffe4e6" opacity="0.8" />
+                                </svg>
+                                <p class="text-[8px] font-bold text-blue-900">1.5x1.2 cm</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 基礎臨床表格卡 6 -->
+                    <div id="chart-card-tables" class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                            <h3 class="text-xs font-bold text-slate-800">結構化臨床表格 (API 5, 14, 18)</h3>
+                        </div>
+
+                        <div class="space-y-3 text-[10px]">
+                            <div class="grid grid-cols-2 gap-2">
+                                <div class="border border-slate-150 rounded-lg p-2.5 bg-slate-50/50 space-y-1">
+                                    <h4 class="font-bold text-slate-700">開刀資訊 (API 5)</h4>
+                                    <p class="text-slate-600 leading-normal">
+                                        <b>手術：</b> 乙狀結腸切術 (6/11 GA麻醉，過程平順)
+                                    </p>
+                                </div>
+                                <div class="border border-slate-150 rounded-lg p-2.5 bg-slate-50/50 space-y-1">
+                                    <h4 class="font-bold text-slate-700">照會感染科 (API 14)</h4>
+                                    <p class="text-slate-600 leading-normal">
+                                        <b>照會進度：</b> 已採 blood culture 並緊急給予 Kefzol Q8H。
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="border border-slate-150 rounded-lg overflow-x-auto">
+                                <table class="w-full text-left border-collapse table-fixed min-w-[220px]">
+                                    <thead>
+                                        <tr class="bg-slate-100 border-b border-slate-200 text-slate-600 font-bold">
+                                            <th class="py-1.5 px-2 w-[30%]">異動狀態</th>
+                                            <th class="py-1.5 px-2 w-[45%]">藥物</th>
+                                            <th class="py-1.5 px-2 w-[25%]">途徑</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100 text-slate-700">
+                                        <tr class="bg-rose-50/30 hover:bg-rose-50/50 transition">
+                                            <td class="py-1.5 px-2">
+                                                <span class="bg-rose-100 text-rose-800 text-[8px] font-extrabold px-1.5 py-0.5 rounded">NEW 新增</span>
+                                            </td>
+                                            <td class="py-1.5 px-2 font-bold text-rose-950 truncate" title="Kefzol (Cefazolin)">Kefzol</td>
+                                            <td class="py-1.5 px-2">IV Q8H</td>
+                                        </tr>
+                                        <tr class="hover:bg-slate-50/50 transition opacity-75">
+                                            <td class="py-1.5 px-2">
+                                                <span class="bg-slate-100 text-slate-600 text-[8px] font-semibold px-1.5 py-0.5 rounded">STOP 停用</span>
+                                            </td>
+                                            <td class="py-1.5 px-2 line-through text-slate-500 truncate" title="Panadol (Acetaminophen)">Panadol</td>
+                                            <td class="py-1.5 px-2">PO QID</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="chart-card-consult" class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-4">
+                        <div class="flex items-start justify-between gap-3 border-b border-slate-100 pb-2">
+                            <div>
+                                <h3 class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                    <i data-lucide="messages-square" class="w-4 h-4 text-cyan-600"></i>
+                                    會診原始資料
+                                </h3>
+                                <p class="text-[10px] text-slate-500 mt-1">翻譯結果只顯示在這個區塊，不會重新生成或修改 AI 交班摘要。</p>
+                            </div>
+                            <span class="text-[9px] bg-cyan-50 text-cyan-700 font-bold px-2 py-0.5 rounded-full">右下角新增</span>
+                        </div>
+
+                        <div class="space-y-3 text-[11px]">
+                            <div class="rounded-xl border border-slate-200 overflow-hidden bg-slate-50/70">
+                                <div class="flex items-center justify-between gap-3 px-3 py-2 border-b border-slate-200 bg-white">
+                                    <div>
+                                        <h4 class="font-bold text-slate-800">感染科會診</h4>
+                                        <p class="text-[10px] text-slate-500">結構化原始資料區塊</p>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-semibold">含英文內容</span>
+                                        <button
+                                            type="button"
+                                            class="consult-translate-btn inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                                            data-consult-id="consult-infect"
+                                            data-original-target="consult-infect-original"
+                                            data-translation-target="consult-infect-translation"
+                                            data-error-target="consult-infect-error"
+                                            onclick="translateConsult(this)">
+                                            <i data-lucide="languages" class="w-3.5 h-3.5"></i>
+                                            英翻中
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="p-3 space-y-3">
+                                    <div id="consult-infect-error" class="hidden rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[10px] text-rose-700"></div>
+                                    <div id="consult-infect-translation" class="space-y-2"></div>
+                                    <div id="consult-infect-original" class="rounded-lg border border-slate-200 bg-white p-3 space-y-2" data-has-english="true">
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <div class="rounded-lg bg-slate-50 p-2">
+                                                <p class="text-[10px] text-slate-500">Consult Date</p>
+                                                <p class="font-semibold text-slate-800">2026/06/18 09:20</p>
+                                            </div>
+                                            <div class="rounded-lg bg-slate-50 p-2">
+                                                <p class="text-[10px] text-slate-500">Service</p>
+                                                <p class="font-semibold text-slate-800">Infectious Disease</p>
+                                            </div>
+                                            <div class="rounded-lg bg-slate-50 p-2">
+                                                <p class="text-[10px] text-slate-500">Reason</p>
+                                                <p class="font-semibold text-slate-800">Persistent fever after colectomy</p>
+                                            </div>
+                                            <div class="rounded-lg bg-slate-50 p-2">
+                                                <p class="text-[10px] text-slate-500">Plan</p>
+                                                <p class="font-semibold text-slate-800">Check blood culture x2 and continue Cefazolin IV q8h</p>
+                                            </div>
+                                        </div>
+                                        <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                            <p class="text-[10px] font-semibold text-slate-500 mb-1">Original narrative note</p>
+                                            <p class="leading-relaxed text-slate-700">Patient is alert. Fever up to 38.2°C overnight. No drainage from wound. Recommend monitor temperature trend and review culture result tomorrow morning.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="rounded-xl border border-slate-200 overflow-hidden bg-slate-50/70">
+                                <div class="flex items-center justify-between gap-3 px-3 py-2 border-b border-slate-200 bg-white">
+                                    <div>
+                                        <h4 class="font-bold text-slate-800">營養會診</h4>
+                                        <p class="text-[10px] text-slate-500">結構化原始資料區塊</p>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-semibold">無英文內容</span>
+                                        <button
+                                            type="button"
+                                            class="consult-translate-btn hidden inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 text-[10px] font-bold text-slate-400"
+                                            data-consult-id="consult-nutrition"
+                                            data-original-target="consult-nutrition-original"
+                                            data-translation-target="consult-nutrition-translation"
+                                            data-error-target="consult-nutrition-error"
+                                            onclick="translateConsult(this)">
+                                            <i data-lucide="languages" class="w-3.5 h-3.5"></i>
+                                            英翻中
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="p-3 space-y-3">
+                                    <div id="consult-nutrition-error" class="hidden rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[10px] text-rose-700"></div>
+                                    <div id="consult-nutrition-translation" class="space-y-2"></div>
+                                    <div id="consult-nutrition-original" class="rounded-lg border border-slate-200 bg-white p-3 space-y-2" data-has-english="false">
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <div class="rounded-lg bg-slate-50 p-2">
+                                                <p class="text-[10px] text-slate-500">會診日期</p>
+                                                <p class="font-semibold text-slate-800">2026/06/18 10:05</p>
+                                            </div>
+                                            <div class="rounded-lg bg-slate-50 p-2">
+                                                <p class="text-[10px] text-slate-500">建議熱量</p>
+                                                <p class="font-semibold text-slate-800">每日 1,650 kcal</p>
+                                            </div>
+                                        </div>
+                                        <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                            <p class="text-[10px] font-semibold text-slate-500 mb-1">備註</p>
+                                            <p class="leading-relaxed text-slate-700">病人目前可少量進食，建議採高蛋白軟質飲食，若噁心改善再逐步增加攝取量。</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="rounded-xl border border-slate-200 overflow-hidden bg-slate-50/70">
+                                <div class="flex items-center justify-between gap-3 px-3 py-2 border-b border-slate-200 bg-white">
+                                    <div>
+                                        <h4 class="font-bold text-slate-800">心臟內科會診</h4>
+                                        <p class="text-[10px] text-slate-500">翻譯失敗情境示意</p>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-semibold">錯誤處理驗收</span>
+                                        <button
+                                            type="button"
+                                            class="consult-translate-btn inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                                            data-consult-id="consult-cardio"
+                                            data-original-target="consult-cardio-original"
+                                            data-translation-target="consult-cardio-translation"
+                                            data-error-target="consult-cardio-error"
+                                            data-force-error="true"
+                                            onclick="translateConsult(this)">
+                                            <i data-lucide="languages" class="w-3.5 h-3.5"></i>
+                                            英翻中
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="p-3 space-y-3">
+                                    <div id="consult-cardio-error" class="hidden rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[10px] text-rose-700"></div>
+                                    <div id="consult-cardio-translation" class="space-y-2"></div>
+                                    <div id="consult-cardio-original" class="rounded-lg border border-slate-200 bg-white p-3 space-y-2" data-has-english="true">
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <div class="rounded-lg bg-slate-50 p-2">
+                                                <p class="text-[10px] text-slate-500">Consult Date</p>
+                                                <p class="font-semibold text-slate-800">2026/06/18 11:40</p>
+                                            </div>
+                                            <div class="rounded-lg bg-slate-50 p-2">
+                                                <p class="text-[10px] text-slate-500">Question</p>
+                                                <p class="font-semibold text-slate-800">Evaluate new onset tachycardia</p>
+                                            </div>
+                                        </div>
+                                        <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                                            <p class="text-[10px] font-semibold text-slate-500 mb-1">Original narrative note</p>
+                                            <p class="leading-relaxed text-slate-700">Please correlate with electrolyte imbalance and repeat ECG if heart rate remains above 120 bpm after fluid challenge.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- 頁尾固定 -->
+    <footer class="bg-white border-t border-slate-200 py-1.5 px-4 lg:px-5 text-center text-[10px] text-slate-400 flex-shrink-0 z-10">
+        <div class="w-full">
+            <p>© 2026 智慧醫療資訊系統。本系統整合之 26 支 API 數據旨在優化醫護人員交班對照，正式處置仍應以電子病歷系統登載為準。</p>
+        </div>
+    </footer>
+
+    <!-- 全螢幕關聯式高亮提示 -->
+    <div id="glow-notification" class="fixed bottom-6 right-6 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 transition-all duration-300 transform translate-y-24 opacity-0 z-50">
+        <div class="p-1.5 bg-violet-600 rounded-lg">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+        </div>
+        <div class="text-xs">
+            <p class="font-semibold text-violet-300" id="toast-title">指標加載成功</p>
+            <p class="text-slate-300" id="toast-desc">已自動載入對應之臨床指標。</p>
+        </div>
+    </div>
+
+    <div id="chart-zoom-modal" class="fixed inset-0 z-[70] hidden">
+        <div class="absolute inset-0 bg-slate-950/45 backdrop-blur-[2px]" onclick="closeChartZoomModal()"></div>
+        <div class="relative z-10 flex h-full w-full items-center justify-center p-4 sm:p-6">
+            <div class="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-white/60 bg-white/95 shadow-2xl">
+                <div class="flex items-center justify-between border-b border-slate-200/80 px-4 py-3 sm:px-5">
+                    <div>
+                        <p class="text-sm font-bold text-slate-800" id="chart-zoom-title">圖表放大檢視</p>
+                        <p class="text-[11px] text-slate-500">可直接拖動放大的圖表查看細節</p>
+                    </div>
+                    <button onclick="closeChartZoomModal()" class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900" title="關閉放大圖">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <div id="chart-zoom-viewport" class="chart-zoom-viewport relative flex-1 overflow-hidden bg-slate-100/90">
+                    <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.6),_rgba(241,245,249,0.85))]"></div>
+                    <div class="relative flex h-full w-full items-center justify-center">
+                        <div id="chart-zoom-content" class="origin-center will-change-transform"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript 邏輯控制與互動設計 -->
+    <script>
+        // 初始化 Lucide 圖標
+        lucide.createIcons();
+
+        const chartZoomState = {
+            active: false,
+            scale: 1.55,
+            fitScale: 1,
+            minScale: 1,
+            maxScale: 3.2,
+            offsetX: 0,
+            offsetY: 0,
+            maxOffsetX: 0,
+            maxOffsetY: 0,
+            pointerId: null,
+            startX: 0,
+            startY: 0,
+            dragOriginX: 0,
+            dragOriginY: 0
+        };
+
+        function setupChartZoomButtons() {
+            document.querySelectorAll('.chart-card').forEach(card => {
+                card.classList.add('relative');
+                if (card.querySelector('.chart-zoom-launch-btn')) return;
+
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'chart-zoom-launch-btn';
+                button.title = '放大圖表';
+                button.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i>';
+                button.onclick = (event) => {
+                    event.stopPropagation();
+                    openChartZoomModal(card.id);
+                };
+                card.appendChild(button);
+            });
+
+            lucide.createIcons();
+        }
+
+        function normalizeZoomCloneIds(node) {
+            node.removeAttribute('id');
+            node.querySelectorAll('[id]').forEach(el => {
+                el.dataset.modalId = el.id;
+                el.removeAttribute('id');
+            });
+            node.querySelectorAll('[onclick]').forEach(el => el.removeAttribute('onclick'));
+            return node;
+        }
+
+        function clampChartZoomOffsets() {
+            chartZoomState.offsetX = Math.max(-chartZoomState.maxOffsetX, Math.min(chartZoomState.maxOffsetX, chartZoomState.offsetX));
+            chartZoomState.offsetY = Math.max(-chartZoomState.maxOffsetY, Math.min(chartZoomState.maxOffsetY, chartZoomState.offsetY));
+        }
+
+        function getChartZoomMetrics() {
+            const viewport = document.getElementById('chart-zoom-viewport');
+            const content = document.getElementById('chart-zoom-content');
+            const clone = content ? content.firstElementChild : null;
+            if (!viewport || !content || !clone) return null;
+
+            return {
+                viewport,
+                content,
+                clone,
+                baseWidth: clone.offsetWidth || 1,
+                baseHeight: clone.offsetHeight || 1
+            };
+        }
+
+        function fitChartZoomToViewport() {
+            const metrics = getChartZoomMetrics();
+            if (!metrics) return;
+
+            const horizontalFit = (metrics.viewport.clientWidth * 0.92) / metrics.baseWidth;
+            const verticalFit = (metrics.viewport.clientHeight * 0.92) / metrics.baseHeight;
+            chartZoomState.fitScale = Math.min(horizontalFit, verticalFit);
+            chartZoomState.minScale = Math.max(0.45, chartZoomState.fitScale * 0.7);
+            chartZoomState.scale = chartZoomState.fitScale;
+            chartZoomState.offsetX = 0;
+            chartZoomState.offsetY = 0;
+            updateChartZoomBounds();
+        }
+
+        function applyChartZoomTransform() {
+            const content = document.getElementById('chart-zoom-content');
+            if (!content) return;
+            content.style.transform = `translate(${chartZoomState.offsetX}px, ${chartZoomState.offsetY}px) scale(${chartZoomState.scale})`;
+        }
+
+        function updateChartZoomBounds() {
+            const metrics = getChartZoomMetrics();
+            if (!metrics) return;
+
+            chartZoomState.maxOffsetX = Math.max(0, (metrics.baseWidth * chartZoomState.scale - metrics.viewport.clientWidth) / 2);
+            chartZoomState.maxOffsetY = Math.max(0, (metrics.baseHeight * chartZoomState.scale - metrics.viewport.clientHeight) / 2);
+            clampChartZoomOffsets();
+            applyChartZoomTransform();
+        }
+
+        function openChartZoomModal(cardId) {
+            const card = document.getElementById(cardId);
+            const modal = document.getElementById('chart-zoom-modal');
+            const content = document.getElementById('chart-zoom-content');
+            const title = document.getElementById('chart-zoom-title');
+            if (!card || !modal || !content || !title) return;
+
+            const clone = normalizeZoomCloneIds(card.cloneNode(true));
+            clone.classList.add('chart-zoom-clone');
+            clone.classList.remove('overflow-hidden');
+
+            content.innerHTML = '';
+            content.appendChild(clone);
+            title.innerText = `${card.querySelector('h3')?.innerText || '圖表'} 放大檢視`;
+
+            chartZoomState.active = true;
+            chartZoomState.offsetX = 0;
+            chartZoomState.offsetY = 0;
+            modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+
+            lucide.createIcons();
+            requestAnimationFrame(() => {
+                updateChartZoomBounds();
+            });
+        }
+
+        function closeChartZoomModal() {
+            const modal = document.getElementById('chart-zoom-modal');
+            const content = document.getElementById('chart-zoom-content');
+            const viewport = document.getElementById('chart-zoom-viewport');
+            if (!modal || !content || !viewport) return;
+
+            chartZoomState.active = false;
+            chartZoomState.pointerId = null;
+            chartZoomState.offsetX = 0;
+            chartZoomState.offsetY = 0;
+            modal.classList.add('hidden');
+            viewport.classList.remove('dragging');
+            document.body.classList.remove('overflow-hidden');
+            content.innerHTML = '';
+        }
+
+        function bindChartZoomInteractions() {
+            const viewport = document.getElementById('chart-zoom-viewport');
+            if (!viewport || viewport.dataset.bound === 'true') return;
+            viewport.dataset.bound = 'true';
+
+            viewport.addEventListener('dragstart', (event) => {
+                event.preventDefault();
+            });
+
+            viewport.addEventListener('pointerdown', (event) => {
+                if (!chartZoomState.active) return;
+                event.preventDefault();
+                chartZoomState.pointerId = event.pointerId;
+                chartZoomState.startX = event.clientX;
+                chartZoomState.startY = event.clientY;
+                chartZoomState.dragOriginX = chartZoomState.offsetX;
+                chartZoomState.dragOriginY = chartZoomState.offsetY;
+                viewport.classList.add('dragging');
+                viewport.setPointerCapture(event.pointerId);
+            });
+
+            viewport.addEventListener('pointermove', (event) => {
+                if (!chartZoomState.active || chartZoomState.pointerId !== event.pointerId) return;
+                chartZoomState.offsetX = chartZoomState.dragOriginX + (event.clientX - chartZoomState.startX);
+                chartZoomState.offsetY = chartZoomState.dragOriginY + (event.clientY - chartZoomState.startY);
+                clampChartZoomOffsets();
+                applyChartZoomTransform();
+            });
+
+            const releaseDrag = (event) => {
+                if (chartZoomState.pointerId !== event.pointerId) return;
+                chartZoomState.pointerId = null;
+                viewport.classList.remove('dragging');
+                if (viewport.hasPointerCapture(event.pointerId)) {
+                    viewport.releasePointerCapture(event.pointerId);
+                }
+            };
+
+            viewport.addEventListener('pointerup', releaseDrag);
+            viewport.addEventListener('pointercancel', releaseDrag);
+
+            window.addEventListener('resize', () => {
+                if (chartZoomState.active) updateChartZoomBounds();
+            });
+
+            window.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && chartZoomState.active) {
+                    closeChartZoomModal();
+                }
+            });
+        }
+
+        const modalChartState = {
+            chartId: null,
+            level: 'today',
+            tprMetric: 'all'
+        };
+
+        function getChartKeyFromCardId(cardId) {
+            return (cardId || '').replace('chart-card-', '');
+        }
+
+        function modalSwitchChartLevel(chartKey, level) {
+            modalChartState.level = level;
+            renderModalChart(chartKey);
+        }
+
+        function modalSwitchTPRMetric(metricId) {
+            modalChartState.tprMetric = metricId;
+            renderModalChart('tpr');
+        }
+
+        function modalUpdateTabUI(chartKey, activeLevel) {
+            zoomLevels.forEach((lvl) => {
+                const btn = document.getElementById(`modal-tab-${chartKey}-${lvl}`);
+                if (!btn) return;
+                if (lvl === activeLevel) {
+                    btn.className = "px-3 py-1 rounded-md text-[11px] transition bg-white text-blue-700 shadow-sm font-bold whitespace-nowrap";
+                } else if (metric === 'rr') {
+                    yLabelHtml = `
+                        <text x="25" y="24" font-size="7" fill="#10b981" font-weight="bold" text-anchor="end">28 /min</text>
+                        <text x="25" y="54" font-size="7" fill="#10b981" text-anchor="end">24 /min</text>
+                        <text x="25" y="84" font-size="7" fill="#10b981" text-anchor="end">20 /min</text>
+                        <text x="25" y="114" font-size="7" fill="#10b981" text-anchor="end">16 /min</text>
+                        <text x="25" y="144" font-size="7" fill="#10b981" text-anchor="end">12 /min</text>
+                    `;
+                } else if (metric === 'rr') {
+                    yLabelHtml = `
+                        <text x="25" y="24" font-size="7" fill="#10b981" font-weight="bold" text-anchor="end">28 /min</text>
+                        <text x="25" y="54" font-size="7" fill="#10b981" text-anchor="end">24 /min</text>
+                        <text x="25" y="84" font-size="7" fill="#10b981" text-anchor="end">20 /min</text>
+                        <text x="25" y="114" font-size="7" fill="#10b981" text-anchor="end">16 /min</text>
+                        <text x="25" y="144" font-size="7" fill="#10b981" text-anchor="end">12 /min</text>
+                    `;
+                } else if (metric === 'rr') {
+                    yLabelHtml = `
+                        <text x="25" y="24" font-size="7" fill="#10b981" font-weight="bold" text-anchor="end">28 /min</text>
+                        <text x="25" y="54" font-size="7" fill="#10b981" text-anchor="end">24 /min</text>
+                        <text x="25" y="84" font-size="7" fill="#10b981" text-anchor="end">20 /min</text>
+                        <text x="25" y="114" font-size="7" fill="#10b981" text-anchor="end">16 /min</text>
+                        <text x="25" y="144" font-size="7" fill="#10b981" text-anchor="end">12 /min</text>
+                    `;
+                } else {
+                    btn.className = "px-3 py-1 rounded-md text-[11px] transition text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 whitespace-nowrap";
+                }
+            });
+        }
+
+        function renderModalChartShell(chartKey) {
+            const content = document.getElementById('chart-zoom-content');
+            if (!content) return;
+
+            const titleMap = {
+                tpr: 'TPR 體溫/心跳與疼痛',
+                sugar: '血糖與 RI 給藥趨勢',
+                io: 'I/O 出入量趨勢',
+                lab: 'WBC / CRP 發炎監測'
+            };
+
+            const tabButtons = zoomLevels.map((lvl) => `
+                <button id="modal-tab-${chartKey}-${lvl}" onclick="modalSwitchChartLevel('${chartKey}', '${lvl}')" class="px-3 py-1 rounded-md text-[11px] transition whitespace-nowrap">${zoomLabelMap[lvl] || lvl}</button>
+            `).join('');
+
+            const tprLegend = chartKey === 'tpr' ? `
+                <div class="flex justify-between items-center text-[11px] text-slate-500 pt-2 border-t border-slate-100">
+                    <span class="flex items-center gap-1 cursor-pointer" onclick="modalSwitchTPRMetric('bt')">
+                        <span class="w-3 h-1 bg-red-500 inline-block rounded-full"></span> 體溫 (BT)
+                    </span>
+                    <span class="flex items-center gap-1 cursor-pointer" onclick="modalSwitchTPRMetric('hr')">
+                        <span class="w-3 h-1 bg-blue-500 inline-block rounded-full"></span> 心跳 (HR)
+                    </span>
+                    <span class="flex items-center gap-1 cursor-pointer" onclick="modalSwitchTPRMetric('pain')">
+                        <span class="w-3 h-1 bg-amber-500 border-t border-dashed inline-block"></span> 疼痛分
+                    </span>
+                </div>
+            ` : '';
+
+            const chartBodyMap = {
+                tpr: `
+                    <div class="relative bg-slate-50/90 rounded-xl p-3 border border-slate-100">
+                        <div class="chart-tooltip absolute hidden bg-slate-900/95 text-white px-2.5 py-1.5 rounded-lg text-[11px] pointer-events-none shadow-lg z-20 transition-opacity duration-150 border border-slate-700/50">
+                            <p class="font-bold text-blue-300 tooltip-title mb-0.5"></p>
+                            <p class="tooltip-content leading-relaxed text-slate-200"></p>
+                        </div>
+                        <div id="modal-tpr-interactive-hint" class="absolute top-2 right-3 text-[10px] text-slate-400 italic pointer-events-none transition-opacity">點擊線條可切換單一指標</div>
+                        <svg class="w-full h-auto aspect-[16/10]" viewBox="0 0 300 180" preserveAspectRatio="none">
+                            <line x1="30" y1="20" x2="280" y2="20" stroke="#e2e8f0" stroke-width="0.8" stroke-dasharray="3" />
+                            <line x1="30" y1="65" x2="280" y2="65" stroke="#e2e8f0" stroke-width="0.8" stroke-dasharray="3" />
+                            <line x1="30" y1="110" x2="280" y2="110" stroke="#e2e8f0" stroke-width="0.8" stroke-dasharray="3" />
+                            <line x1="30" y1="150" x2="280" y2="150" stroke="#cbd5e1" stroke-width="1" />
+                            <g id="modal-tpr-grid-lines"></g>
+                            <path id="modal-path-tpr-bt" d="" fill="none" stroke="#ef4444" stroke-width="2.5" class="transition-all duration-500 interactive-line" onclick="modalSwitchTPRMetric('bt')" />
+                            <path id="modal-path-tpr-hr" d="" fill="none" stroke="#3b82f6" stroke-width="2" class="transition-all duration-500 interactive-line" onclick="modalSwitchTPRMetric('hr')" />
+                            <path id="modal-path-tpr-pain" d="" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="2,2" class="transition-all duration-500 interactive-line" onclick="modalSwitchTPRMetric('pain')" />
+                            <path id="modal-path-tpr-bt-hit" d="" class="interactive-hit-area" onclick="modalSwitchTPRMetric('bt')" />
+                            <path id="modal-path-tpr-hr-hit" d="" class="interactive-hit-area" onclick="modalSwitchTPRMetric('hr')" />
+                            <path id="modal-path-tpr-pain-hit" d="" class="interactive-hit-area" onclick="modalSwitchTPRMetric('pain')" />
+                            <g id="modal-tpr-dots-group"></g>
+                            <g id="modal-tpr-labels-group"></g>
+                            <g id="modal-tpr-y-labels-group"></g>
+                        </svg>
+                    </div>
+                    <div class="flex items-center justify-between pt-2">
+                        <div class="flex items-center gap-2">
+                            <span id="modal-tpr-range-badge" class="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold uppercase"></span>
+                            <p id="modal-tpr-range-text" class="text-[11px] text-slate-500"></p>
+                        </div>
+                        <button id="modal-tpr-reset-btn" onclick="modalSwitchTPRMetric('all')" class="hidden text-[10px] font-bold bg-slate-200 hover:bg-blue-600 hover:text-white text-slate-700 px-2 py-1 rounded transition">顯示全部</button>
+                    </div>
+                    ${tprLegend}
+                `,
+                sugar: `
+                    <div class="relative bg-slate-50/90 rounded-xl p-3 border border-slate-100 flex flex-col justify-between">
+                        <div class="chart-tooltip absolute hidden bg-slate-900/95 text-white px-2.5 py-1.5 rounded-lg text-[11px] pointer-events-none shadow-lg z-20 transition-opacity duration-150 border border-slate-700/50">
+                            <p class="font-bold text-blue-300 tooltip-title mb-0.5"></p>
+                            <p class="tooltip-content leading-relaxed text-slate-200"></p>
+                        </div>
+                        <svg class="w-full h-auto aspect-[16/8]" viewBox="0 0 300 130" preserveAspectRatio="none">
+                            <rect x="30" y="45" width="250" height="40" fill="#10b981" fill-opacity="0.08" />
+                            <line x1="30" y1="45" x2="280" y2="45" stroke="#10b981" stroke-width="0.6" stroke-dasharray="2,2" stroke-opacity="0.4" />
+                            <line x1="30" y1="85" x2="280" y2="85" stroke="#10b981" stroke-width="0.6" stroke-dasharray="2,2" stroke-opacity="0.4" />
+                            <path id="modal-path-sugar" d="" fill="none" stroke="#6366f1" stroke-width="2.5" class="transition-all duration-500" />
+                            <g id="modal-sugar-dots-group"></g>
+                            <g id="modal-sugar-labels-group"></g>
+                            <text x="25" y="25" font-size="7" fill="#64748b" text-anchor="end">280</text>
+                            <text x="25" y="65" font-size="7" fill="#10b981" text-anchor="end">140</text>
+                            <text x="25" y="105" font-size="7" fill="#64748b" text-anchor="end">80</text>
+                        </svg>
+                        <div class="pt-2 mt-2 border-t border-slate-200">
+                            <div id="modal-sugar-timeline-grid" class="grid grid-cols-4 gap-1 text-center text-[10px] text-slate-500 font-medium"></div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 pt-2">
+                        <span id="modal-sugar-range-badge" class="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold uppercase"></span>
+                        <p id="modal-sugar-range-text" class="text-[11px] text-slate-500"></p>
+                    </div>
+                `,
+                io: `
+                    <div class="relative bg-slate-50/90 rounded-xl p-3 border border-slate-100">
+                        <div class="chart-tooltip absolute hidden bg-slate-900/95 text-white px-2.5 py-1.5 rounded-lg text-[11px] pointer-events-none shadow-lg z-20 transition-opacity duration-150 border border-slate-700/50">
+                            <p class="font-bold text-blue-300 tooltip-title mb-0.5"></p>
+                            <p class="tooltip-content leading-relaxed text-slate-200"></p>
+                        </div>
+                        <svg class="w-full h-auto aspect-[16/9]" viewBox="0 0 300 130" preserveAspectRatio="none">
+                            <line x1="30" y1="20" x2="280" y2="20" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="3" />
+                            <line x1="30" y1="60" x2="280" y2="60" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="3" />
+                            <line x1="30" y1="100" x2="280" y2="100" stroke="#cbd5e1" stroke-width="1" />
+                            <g id="modal-io-grid-lines"></g>
+                            <g id="modal-io-y-labels"></g>
+                            <g id="modal-io-bars-group"></g>
+                            <g id="modal-io-bar-value-labels"></g>
+                            <g id="modal-io-x-labels"></g>
+                        </svg>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 pt-2">
+                        <span id="modal-io-range-badge" class="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold uppercase"></span>
+                        <p id="modal-io-range-text" class="text-[11px] text-slate-500">藍色為輸入、橘色為輸出</p>
+                        <div id="modal-io-color-legend" class="flex items-center gap-2 text-[10px] text-slate-500">
+                            <span class="inline-flex items-center gap-1">
+                                <span class="w-2.5 h-2.5 rounded-sm bg-blue-500"></span>
+                                入量
+                            </span>
+                            <span class="inline-flex items-center gap-1">
+                                <span class="w-2.5 h-2.5 rounded-sm bg-orange-500"></span>
+                                出量
+                            </span>
+                        </div>
+                    </div>
+                `,
+                lab: `
+                    <div class="relative bg-slate-50/90 rounded-xl p-3 border border-slate-100">
+                        <div class="chart-tooltip absolute hidden bg-slate-900/95 text-white px-2.5 py-1.5 rounded-lg text-[11px] pointer-events-none shadow-lg z-20 transition-opacity duration-150 border border-slate-700/50">
+                            <p class="font-bold text-blue-300 tooltip-title mb-0.5"></p>
+                            <p class="tooltip-content leading-relaxed text-slate-200"></p>
+                        </div>
+                        <svg class="w-full h-auto aspect-[16/10]" viewBox="0 0 300 150" preserveAspectRatio="none">
+                            <text x="32" y="14" font-size="7" fill="#10b981" font-weight="700">WBC (/uL)</text>
+                            <line x1="30" y1="18" x2="280" y2="18" stroke="#d1fae5" stroke-width="0.8" stroke-dasharray="3" />
+                            <line x1="30" y1="38" x2="280" y2="38" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="3" />
+                            <line x1="30" y1="58" x2="280" y2="58" stroke="#bbf7d0" stroke-width="0.9" />
+                            <text x="32" y="74" font-size="7" fill="#8b5cf6" font-weight="700">CRP (mg/dL)</text>
+                            <line x1="30" y1="78" x2="280" y2="78" stroke="#ede9fe" stroke-width="0.8" stroke-dasharray="3" />
+                            <line x1="30" y1="98" x2="280" y2="98" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="3" />
+                            <line x1="30" y1="118" x2="280" y2="118" stroke="#ddd6fe" stroke-width="0.9" />
+                            <g id="modal-lab-grid-lines"></g>
+                            <g id="modal-lab-wbc-y-labels"></g>
+                            <g id="modal-lab-crp-y-labels"></g>
+                            <path id="modal-path-lab-wbc" d="" fill="none" stroke="#10b981" stroke-width="2.5" class="transition-all duration-500" />
+                            <path id="modal-path-lab-crp" d="" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="3,2" class="transition-all duration-500" />
+                            <g id="modal-lab-wbc-dots-group"></g>
+                            <g id="modal-lab-crp-dots-group"></g>
+                            <g id="modal-lab-labels-group"></g>
+                        </svg>
+                    </div>
+                    <div class="flex items-center gap-2 pt-2">
+                        <span id="modal-lab-range-badge" class="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold uppercase"></span>
+                        <p id="modal-lab-range-text" class="text-[11px] text-slate-500"></p>
+                    </div>
+                `
+            };
+
+            content.innerHTML = `
+                <div class="chart-zoom-clone bg-white/90 rounded-[24px] border border-slate-200 px-5 py-4">
+                    <div class="flex flex-col gap-3">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                            <div>
+                                <h3 class="text-sm font-bold text-slate-800">${titleMap[chartKey] || '圖表放大檢視'}</h3>
+                                <p class="text-[11px] text-slate-500">放大視窗內可獨立切換層級與查看數值</p>
+                            </div>
+                            <div class="flex bg-slate-100 p-1 rounded-lg text-[11px] font-semibold space-x-1 shadow-inner">
+                                ${tabButtons}
+                            </div>
+                        </div>
+                        ${chartBodyMap[chartKey] || ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderModalTPRChart(level = 'today') {
+            const dataPoints = tprRawData[level];
+            const length = dataPoints.length;
+            const startX = 40;
+            const endX = 270;
+            const stepX = (endX - startX) / (length - 1 || 1);
+            const yMax = 20;
+            const yMin = 140;
+            const metric = modalChartState.tprMetric;
+
+            const mapValueToY = (val, minVal, maxVal) => {
+                const ratio = (val - minVal) / (maxVal - minVal || 1);
+                return yMin - ratio * (yMin - yMax);
+            };
+
+let btRange, hrRange, rrRange, painRange;
+            if (metric === 'all') {
+                btRange = { min: 35.0, max: 40.0 };
+                hrRange = { min: 40, max: 160 };
+                painRange = { min: 0, max: 12 };
+            } else {
+                btRange = { min: 35.5, max: 39.5 };
+                hrRange = { min: 50, max: 140 };
+                painRange = { min: 0, max: 10 };
+            }
+
+            const btCoords = [], hrCoords = [], painCoords = [];
+            dataPoints.forEach((dp, index) => {
+                const x = startX + index * stepX;
+                btCoords.push({ x, y: mapValueToY(dp.bt, btRange.min, btRange.max) });
+                hrCoords.push({ x, y: mapValueToY(dp.hr, hrRange.min, hrRange.max) });
+                painCoords.push({ x, y: mapValueToY(dp.pain, painRange.min, painRange.max) });
+            });
+
+            const buildSVGPath = (coords) => {
+                if (coords.length === 0) return '';
+                let d = `M ${coords[0].x},${coords[0].y}`;
+                for (let i = 1; i < coords.length; i++) d += ` L ${coords[i].x},${coords[i].y}`;
+                return d;
+            };
+
+            const btPath = buildSVGPath(btCoords);
+            const hrPath = buildSVGPath(hrCoords);
+            const painPath = buildSVGPath(painCoords);
+
+            document.getElementById('modal-path-tpr-bt').setAttribute('d', btPath);
+            document.getElementById('modal-path-tpr-hr').setAttribute('d', hrPath);
+            document.getElementById('modal-path-tpr-pain').setAttribute('d', painPath);
+            document.getElementById('modal-path-tpr-bt-hit').setAttribute('d', btPath);
+            document.getElementById('modal-path-tpr-hr-hit').setAttribute('d', hrPath);
+            document.getElementById('modal-path-tpr-pain-hit').setAttribute('d', painPath);
+
+            const btPathEl = document.getElementById('modal-path-tpr-bt');
+            const hrPathEl = document.getElementById('modal-path-tpr-hr');
+            const painPathEl = document.getElementById('modal-path-tpr-pain');
+            if (metric === 'all') {
+                btPathEl.style.opacity = '1';
+                hrPathEl.style.opacity = '1';
+                painPathEl.style.opacity = '1';
+                btPathEl.setAttribute('stroke-width', '2.5');
+                hrPathEl.setAttribute('stroke-width', '2');
+                painPathEl.setAttribute('stroke-width', '1.5');
+            } else {
+                btPathEl.style.opacity = metric === 'bt' ? '1' : '0.12';
+                hrPathEl.style.opacity = metric === 'hr' ? '1' : '0.12';
+                painPathEl.style.opacity = metric === 'pain' ? '1' : '0.12';
+                btPathEl.setAttribute('stroke-width', metric === 'bt' ? '3.5' : '2.5');
+                hrPathEl.setAttribute('stroke-width', metric === 'hr' ? '3.5' : '2');
+                painPathEl.setAttribute('stroke-width', metric === 'pain' ? '3' : '1.5');
+            }
+
+            document.getElementById('modal-tpr-range-badge').innerText = zoomLabelMap[level];
+            document.getElementById('modal-tpr-range-text').innerText = `顯示 ${zoomLabelMap[level]} TPR 趨勢`;
+
+            const resetBtn = document.getElementById('modal-tpr-reset-btn');
+            const hint = document.getElementById('modal-tpr-interactive-hint');
+            if (metric === 'all') {
+                resetBtn.classList.add('hidden');
+                hint.classList.remove('opacity-0');
+            } else {
+                resetBtn.classList.remove('hidden');
+                hint.classList.add('opacity-0');
+            }
+
+            let yLabelHtml = '';
+            if (metric === 'all') {
+                yLabelHtml += `
+                    <text x="25" y="24" font-size="6.5" fill="#ef4444" font-weight="bold" text-anchor="end">39°C</text>
+                    <text x="25" y="68" font-size="6.5" fill="#f59e0b" font-weight="bold" text-anchor="end">Pain(7)</text>
+                    <text x="25" y="113" font-size="6.5" fill="#3b82f6" font-weight="bold" text-anchor="end">70 bpm</text>
+                `;
+            } else if (metric === 'bt') {
+                yLabelHtml += `
+                    <text x="25" y="24" font-size="7" fill="#ef4444" font-weight="bold" text-anchor="end">39.5°C</text>
+                    <text x="25" y="54" font-size="7" fill="#ef4444" text-anchor="end">38.5°C</text>
+                    <text x="25" y="84" font-size="7" fill="#ef4444" text-anchor="end">37.5°C</text>
+                    <text x="25" y="114" font-size="7" fill="#ef4444" text-anchor="end">36.5°C</text>
+                    <text x="25" y="144" font-size="7" fill="#ef4444" text-anchor="end">35.5°C</text>
+                `;
+            } else if (metric === 'hr') {
+                yLabelHtml += `
+                    <text x="25" y="24" font-size="7" fill="#3b82f6" font-weight="bold" text-anchor="end">140 bpm</text>
+                    <text x="25" y="54" font-size="7" fill="#3b82f6" text-anchor="end">120 bpm</text>
+                    <text x="25" y="84" font-size="7" fill="#3b82f6" text-anchor="end">100 bpm</text>
+                    <text x="25" y="114" font-size="7" fill="#3b82f6" text-anchor="end">80 bpm</text>
+                    <text x="25" y="144" font-size="7" fill="#3b82f6" text-anchor="end">60 bpm</text>
+                `;
+            } else {
+                yLabelHtml += `
+                    <text x="25" y="24" font-size="7" fill="#f59e0b" font-weight="bold" text-anchor="end">10</text>
+                    <text x="25" y="54" font-size="7" fill="#f59e0b" text-anchor="end">8</text>
+                    <text x="25" y="84" font-size="7" fill="#f59e0b" text-anchor="end">6</text>
+                    <text x="25" y="114" font-size="7" fill="#f59e0b" text-anchor="end">4</text>
+                    <text x="25" y="144" font-size="7" fill="#f59e0b" text-anchor="end">0</text>
+                `;
+            }
+            document.getElementById('modal-tpr-y-labels-group').innerHTML = yLabelHtml;
+
+            let gridHtml = '';
+            dataPoints.forEach((dp, index) => {
+                const x = startX + index * stepX;
+                gridHtml += `<line x1="${x}" y1="20" x2="${x}" y2="150" stroke="#e2e8f0" stroke-width="0.8" stroke-dasharray="2,2" />`;
+            });
+            document.getElementById('modal-tpr-grid-lines').innerHTML = gridHtml;
+
+            let dotsHtml = '';
+            dataPoints.forEach((dp, index) => {
+                const x = startX + index * stepX;
+                if (metric === 'all' || metric === 'bt') {
+                    const y = mapValueToY(dp.bt, btRange.min, btRange.max);
+                    dotsHtml += `<circle cx="${x}" cy="${y}" r="3.5" fill="#f43f5e" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                        onmouseover="showTooltip(event, '體溫 (BT)', '時間: ${dp.time}<br>數值: <b>${dp.bt} °C</b><br>狀態: ${dp.bt >= 38.0 ? "⚠️ 發燒" : "正常"}')"
+                        onmousemove="moveTooltip(event)"
+                        onmouseout="hideTooltip(event)" />`;
+                }
+                if (metric === 'all' || metric === 'hr') {
+                    const y = mapValueToY(dp.hr, hrRange.min, hrRange.max);
+                    dotsHtml += `<circle cx="${x}" cy="${y}" r="3.5" fill="#3b82f6" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                        onmouseover="showTooltip(event, '心跳 (HR)', '時間: ${dp.time}<br>數值: <b>${dp.hr} bpm</b><br>狀態: ${dp.hr >= 100 ? "⚠️ 過速" : "正常"}')"
+                        onmousemove="moveTooltip(event)"
+                        onmouseout="hideTooltip(event)" />`;
+                }
+                if (metric === 'all' || metric === 'pain') {
+                    const y = mapValueToY(dp.pain, painRange.min, painRange.max);
+                    dotsHtml += `<circle cx="${x}" cy="${y}" r="3.5" fill="#f59e0b" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                        onmouseover="showTooltip(event, '疼痛強度 (Pain)', '時間: ${dp.time}<br>疼痛VAS評分: <b>${dp.pain} /10 分</b>')"
+                        onmousemove="moveTooltip(event)"
+                        onmouseout="hideTooltip(event)" />`;
+                }
+            });
+            document.getElementById('modal-tpr-dots-group').innerHTML = dotsHtml;
+
+            let labelsHtml = '';
+            const labelInterval = length > 6 ? 2 : 1;
+            dataPoints.forEach((dp, index) => {
+                if (index % labelInterval === 0 || index === length - 1) {
+                    const x = startX + index * stepX;
+                    labelsHtml += `<text x="${x}" y="165" font-size="7" fill="#64748b" text-anchor="middle">${dp.time}</text>`;
+                }
+            });
+            document.getElementById('modal-tpr-labels-group').innerHTML = labelsHtml;
+        }
+
+        function renderModalSugarChart(level = 'today') {
+            const source = chartDataStore.sugar[level];
+            document.getElementById('modal-path-sugar').setAttribute('d', source.path);
+            document.getElementById('modal-sugar-range-text').innerText = source.rangeText;
+            document.getElementById('modal-sugar-range-badge').innerText = source.badge;
+
+            let dotsHtml = '';
+            source.points.forEach(pt => {
+                dotsHtml += `<circle cx="${pt.cx}" cy="${pt.cy}" r="3.5" fill="#6366f1" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                    onmouseover="showTooltip(event, '血糖監控數值', '${pt.val}')"
+                    onmousemove="moveTooltip(event)"
+                    onmouseout="hideTooltip(event)" />`;
+            });
+            document.getElementById('modal-sugar-dots-group').innerHTML = dotsHtml;
+
+            let labelsHtml = '';
+            const labelXGroup = level === 'today' ? [40, 150, 260] : (level === '3days' ? [40, 150, 260] : [40, 130, 260]);
+            const labelTextGroup = level === 'today' ? ['07:00', '09:30', '11:30'] : (level === '3days' ? ['6/15', '6/16', '今日'] : ['6/11', '6/15', '今日']);
+            labelTextGroup.forEach((text, idx) => {
+                labelsHtml += `<text x="${labelXGroup[idx]}" y="120" font-size="7" fill="#64748b" text-anchor="middle">${text}</text>`;
+            });
+            document.getElementById('modal-sugar-labels-group').innerHTML = labelsHtml;
+
+            let timelineHtml = '';
+            source.timeline.forEach(item => {
+                timelineHtml += `<div><p class="font-bold text-slate-400">${item.title}</p><span class="bg-blue-50 text-blue-700 px-1 py-0.5 rounded block mt-0.5 font-bold">${item.val}</span></div>`;
+            });
+            document.getElementById('modal-sugar-timeline-grid').innerHTML = timelineHtml;
+        }
+
+        function renderIOChartCommon(level = 'today', prefix = '') {
+            const source = chartDataStore.io[level];
+            const id = (suffix) => `${prefix}${suffix}`;
+            const scaleFactor = 25;
+            const chartTop = 20;
+            const chartBottom = 100;
+            const chartHeight = chartBottom - chartTop;
+            const maxValue = Math.max(...source.flatMap((bar) => [bar.h1 * scaleFactor, bar.h2 * scaleFactor]));
+            const roundedMax = Math.ceil(maxValue / 500) * 500;
+            const ticks = [roundedMax, roundedMax / 2, 0];
+
+            document.getElementById(id('io-range-badge')).innerText = zoomLabelMap[level];
+            document.getElementById(id('io-range-text')).innerText = '藍條：入量 • 橘條：出量 • 柱上直接顯示數值';
+
+            const mapY = (value) => chartBottom - (value / (roundedMax || 1)) * chartHeight;
+
+            document.getElementById(id('io-y-labels')).innerHTML = ticks.map((value) => `
+                <text x="26" y="${mapY(value) + 2}" font-size="6.5" fill="#64748b" text-anchor="end">${Math.round(value)}</text>
+            `).join('');
+
+            document.getElementById(id('io-grid-lines')).innerHTML = ticks.slice(1, -1).map((value) => `
+                <line x1="30" y1="${mapY(value)}" x2="280" y2="${mapY(value)}" stroke="#cbd5e1" stroke-width="0.7" stroke-dasharray="2,2" />
+            `).join('');
+
+            let barsHtml = '';
+            let valueLabelsHtml = '';
+            let xLabelsHtml = '';
+
+            source.forEach((bar) => {
+                const intakeValue = bar.h1 * scaleFactor;
+                const outputValue = bar.h2 * scaleFactor;
+                const intakeY = mapY(intakeValue);
+                const outputY = mapY(outputValue);
+                const labelX = (bar.x1 + bar.x2 + 9) / 2;
+
+                barsHtml += `
+                    <rect x="${bar.x1}" y="${intakeY}" width="9" height="${chartBottom - intakeY}" fill="#3b82f6" rx="1" class="cursor-pointer hover:opacity-80 transition-opacity"
+                        onmouseover="showTooltip(event, '液體輸入 (Intake)', '日期: ${bar.text}<br>累計入量: ${intakeValue} ml')"
+                        onmousemove="moveTooltip(event)"
+                        onmouseout="hideTooltip(event)" />
+                    <rect x="${bar.x2}" y="${outputY}" width="9" height="${chartBottom - outputY}" fill="#f97316" rx="1" class="cursor-pointer hover:opacity-80 transition-opacity"
+                        onmouseover="showTooltip(event, '液體輸出 (Output)', '日期: ${bar.text}<br>累計出量: ${outputValue} ml')"
+                        onmousemove="moveTooltip(event)"
+                        onmouseout="hideTooltip(event)" />
+                `;
+
+                valueLabelsHtml += `
+                    <text x="${bar.x1 + 4.5}" y="${Math.max(intakeY - 3, 12)}" font-size="6.2" fill="#1d4ed8" text-anchor="middle" font-weight="700">${intakeValue}</text>
+                    <text x="${bar.x2 + 4.5}" y="${Math.max(outputY - 3, 12)}" font-size="6.2" fill="#c2410c" text-anchor="middle" font-weight="700">${outputValue}</text>
+                `;
+
+                xLabelsHtml += `<text x="${labelX}" y="115" font-size="7" fill="#64748b" text-anchor="middle">${bar.text}</text>`;
+            });
+
+            document.getElementById(id('io-bars-group')).innerHTML = barsHtml;
+            document.getElementById(id('io-bar-value-labels')).innerHTML = valueLabelsHtml;
+            document.getElementById(id('io-x-labels')).innerHTML = xLabelsHtml;
+        }
+
+        function renderModalIOChart(level = 'today') {
+            renderIOChartCommon(level, 'modal-');
+        }
+
+        function renderModalLabChart(level = 'today') {
+            const source = labSeriesStore[level];
+            const points = source.points;
+            const startX = 40;
+            const endX = 260;
+            const stepX = (endX - startX) / (points.length - 1 || 1);
+            const withPadding = (values) => {
+                const min = Math.min(...values);
+                const max = Math.max(...values);
+                const span = Math.max(max - min, 1);
+                const padding = span * 0.15;
+                return { min: Math.max(0, min - padding), max: max + padding };
+            };
+            const mapY = (value, min, max, top, bottom) => {
+                const ratio = (value - min) / (max - min || 1);
+                return bottom - ratio * (bottom - top);
+            };
+            const buildPath = (coords) => coords.map((pt, index) => `${index === 0 ? 'M' : 'L'} ${pt.x},${pt.y}`).join(' ');
+
+            const wbcRange = withPadding(points.map(pt => pt.wbc));
+            const crpRange = withPadding(points.map(pt => pt.crp));
+            const wbcCoords = points.map((pt, index) => ({ x: startX + index * stepX, y: mapY(pt.wbc, wbcRange.min, wbcRange.max, 18, 58) }));
+            const crpCoords = points.map((pt, index) => ({ x: startX + index * stepX, y: mapY(pt.crp, crpRange.min, crpRange.max, 78, 118) }));
+
+            document.getElementById('modal-path-lab-wbc').setAttribute('d', buildPath(wbcCoords));
+            document.getElementById('modal-path-lab-crp').setAttribute('d', buildPath(crpCoords));
+            document.getElementById('modal-lab-range-text').innerText = source.rangeText;
+            document.getElementById('modal-lab-range-badge').innerText = source.badge;
+
+            const wbcTicks = [wbcRange.max, (wbcRange.max + wbcRange.min) / 2, wbcRange.min];
+            const crpTicks = [crpRange.max, (crpRange.max + crpRange.min) / 2, crpRange.min];
+            document.getElementById('modal-lab-wbc-y-labels').innerHTML = wbcTicks.map((value) => `<text x="26" y="${mapY(value, wbcRange.min, wbcRange.max, 18, 58) + 2}" font-size="6.5" fill="#059669" text-anchor="end">${Math.round(value).toLocaleString()}</text>`).join('');
+            document.getElementById('modal-lab-crp-y-labels').innerHTML = crpTicks.map((value) => `<text x="26" y="${mapY(value, crpRange.min, crpRange.max, 78, 118) + 2}" font-size="6.5" fill="#7c3aed" text-anchor="end">${value.toFixed(1)}</text>`).join('');
+
+            let gridHtml = '';
+            points.forEach((pt, index) => {
+                const x = startX + index * stepX;
+                gridHtml += `<line x1="${x}" y1="18" x2="${x}" y2="118" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2,2" />`;
+            });
+            document.getElementById('modal-lab-grid-lines').innerHTML = gridHtml;
+
+            let wbcDotsHtml = '';
+            let crpDotsHtml = '';
+            points.forEach((pt, index) => {
+                const x = startX + index * stepX;
+                const wbcY = mapY(pt.wbc, wbcRange.min, wbcRange.max, 18, 58);
+                const crpY = mapY(pt.crp, crpRange.min, crpRange.max, 78, 118);
+                wbcDotsHtml += `<circle cx="${x}" cy="${wbcY}" r="3.5" fill="#10b981" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                    onmouseover="showTooltip(event, 'WBC 趨勢', '${pt.tooltip}')"
+                    onmousemove="moveTooltip(event)"
+                    onmouseout="hideTooltip(event)" />`;
+                crpDotsHtml += `<circle cx="${x}" cy="${crpY}" r="3.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                    onmouseover="showTooltip(event, 'CRP 趨勢', '${pt.tooltip}')"
+                    onmousemove="moveTooltip(event)"
+                    onmouseout="hideTooltip(event)" />`;
+            });
+            document.getElementById('modal-lab-wbc-dots-group').innerHTML = wbcDotsHtml;
+            document.getElementById('modal-lab-crp-dots-group').innerHTML = crpDotsHtml;
+
+            let labelsHtml = '';
+            points.forEach((pt, index) => {
+                const x = startX + index * stepX;
+                labelsHtml += `<text x="${x}" y="142" font-size="7" fill="#64748b" text-anchor="middle">${pt.label}</text>`;
+            });
+            document.getElementById('modal-lab-labels-group').innerHTML = labelsHtml;
+        }
+
+        function renderModalChart(chartKey) {
+            renderModalChartShell(chartKey);
+            modalUpdateTabUI(chartKey, modalChartState.level);
+
+            if (chartKey === 'tpr') renderModalTPRChart(modalChartState.level);
+            if (chartKey === 'sugar') renderModalSugarChart(modalChartState.level);
+            if (chartKey === 'io') renderModalIOChart(modalChartState.level);
+            if (chartKey === 'lab') renderModalLabChart(modalChartState.level);
+
+            requestAnimationFrame(() => {
+                if (!chartZoomState.pointerId) {
+                    if (chartZoomState.scale <= (chartZoomState.fitScale || 1) + 0.02) {
+                        fitChartZoomToViewport();
+                    } else {
+                        updateChartZoomBounds();
+                    }
+                }
+            });
+        }
+
+        function openChartZoomModal(cardId) {
+            const chartKey = getChartKeyFromCardId(cardId);
+            const modal = document.getElementById('chart-zoom-modal');
+            const title = document.getElementById('chart-zoom-title');
+            if (!chartKey || !modal || !title) return;
+
+            modalChartState.chartId = chartKey;
+            modalChartState.level = zoomLevels[chartZoomIndices[chartKey] || 0] || 'today';
+            modalChartState.tprMetric = chartKey === 'tpr' ? currentTPRMetric : 'all';
+
+            title.innerText = `${(document.getElementById(cardId)?.querySelector('h3')?.innerText) || '圖表'} 放大檢視`;
+            chartZoomState.active = true;
+            chartZoomState.fitScale = 1;
+            chartZoomState.scale = 1;
+            chartZoomState.offsetX = 0;
+            chartZoomState.offsetY = 0;
+            modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+
+            renderModalChart(chartKey);
+            lucide.createIcons();
+        }
+
+        // 模擬針扎高危險註記隱私切換 (API 26)
+        function getChartZoomSource(card) {
+            if (!card) return null;
+            return card.querySelector('.chart-zoom-source')
+                || card.querySelector('.bg-slate-50\\/75.rounded-lg.p-2.border.border-slate-100')
+                || card.querySelector('svg')?.parentElement
+                || null;
+        }
+
+        function setupChartZoomButtons() {
+            ['chart-card-tpr', 'chart-card-sugar', 'chart-card-io', 'chart-card-lab'].forEach((cardId) => {
+                const card = document.getElementById(cardId);
+                const source = getChartZoomSource(card);
+                if (!card || !source) return;
+
+                source.classList.add('chart-zoom-source');
+                source.classList.add('relative');
+                if (source.querySelector('.chart-zoom-launch-btn')) return;
+
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'chart-zoom-launch-btn';
+                button.title = '放大圖表';
+                button.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i>';
+                button.onclick = (event) => {
+                    event.stopPropagation();
+                    openChartZoomModal(cardId);
+                };
+                source.appendChild(button);
+            });
+
+            lucide.createIcons();
+        }
+
+        function openChartZoomModal(cardId) {
+            const card = document.getElementById(cardId);
+            const source = getChartZoomSource(card);
+            const modal = document.getElementById('chart-zoom-modal');
+            const content = document.getElementById('chart-zoom-content');
+            const title = document.getElementById('chart-zoom-title');
+            if (!card || !source || !modal || !content || !title) return;
+
+            const clone = normalizeZoomCloneIds(source.cloneNode(true));
+            clone.classList.add('chart-zoom-clone');
+
+            content.innerHTML = '';
+            content.appendChild(clone);
+            title.innerText = `${card.querySelector('h3')?.innerText || '圖表'} 放大檢視`;
+
+            chartZoomState.active = true;
+            chartZoomState.fitScale = 1;
+            chartZoomState.scale = 1;
+            chartZoomState.offsetX = 0;
+            chartZoomState.offsetY = 0;
+            modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+
+            lucide.createIcons();
+            requestAnimationFrame(() => {
+                fitChartZoomToViewport();
+            });
+        }
+
+        function closeChartZoomModal() {
+            const modal = document.getElementById('chart-zoom-modal');
+            const content = document.getElementById('chart-zoom-content');
+            const viewport = document.getElementById('chart-zoom-viewport');
+            if (!modal || !content || !viewport) return;
+
+            chartZoomState.active = false;
+            chartZoomState.pointerId = null;
+            chartZoomState.fitScale = 1;
+            chartZoomState.scale = 1;
+            chartZoomState.offsetX = 0;
+            chartZoomState.offsetY = 0;
+            modal.classList.add('hidden');
+            viewport.classList.remove('dragging');
+            document.body.classList.remove('overflow-hidden');
+            content.innerHTML = '';
+        }
+
+        function bindChartZoomInteractions() {
+            const viewport = document.getElementById('chart-zoom-viewport');
+            if (!viewport || viewport.dataset.bound === 'true') return;
+            viewport.dataset.bound = 'true';
+
+            viewport.addEventListener('pointerdown', (event) => {
+                if (!chartZoomState.active) return;
+                chartZoomState.pointerId = event.pointerId;
+                chartZoomState.startX = event.clientX;
+                chartZoomState.startY = event.clientY;
+                chartZoomState.dragOriginX = chartZoomState.offsetX;
+                chartZoomState.dragOriginY = chartZoomState.offsetY;
+                viewport.classList.add('dragging');
+                viewport.setPointerCapture(event.pointerId);
+            });
+
+            viewport.addEventListener('pointermove', (event) => {
+                if (!chartZoomState.active || chartZoomState.pointerId !== event.pointerId) return;
+                chartZoomState.offsetX = chartZoomState.dragOriginX + (event.clientX - chartZoomState.startX);
+                chartZoomState.offsetY = chartZoomState.dragOriginY + (event.clientY - chartZoomState.startY);
+                clampChartZoomOffsets();
+                applyChartZoomTransform();
+            });
+
+            const releaseDrag = (event) => {
+                if (chartZoomState.pointerId !== event.pointerId) return;
+                chartZoomState.pointerId = null;
+                viewport.classList.remove('dragging');
+                if (viewport.hasPointerCapture(event.pointerId)) {
+                    viewport.releasePointerCapture(event.pointerId);
+                }
+            };
+
+            viewport.addEventListener('pointerup', releaseDrag);
+            viewport.addEventListener('pointercancel', releaseDrag);
+            viewport.addEventListener('wheel', (event) => {
+                if (!chartZoomState.active || !event.ctrlKey) return;
+                event.preventDefault();
+                const delta = event.deltaY < 0 ? 0.16 : -0.16;
+                chartZoomState.scale = Math.max(chartZoomState.minScale, Math.min(chartZoomState.maxScale, chartZoomState.scale + delta));
+                updateChartZoomBounds();
+            }, { passive: false });
+
+            window.addEventListener('resize', () => {
+                if (chartZoomState.active) updateChartZoomBounds();
+            });
+
+            window.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && chartZoomState.active) {
+                    closeChartZoomModal();
+                }
+            });
+        }
+
+        function bindChartZoomInteractions() {
+            const viewport = document.getElementById('chart-zoom-viewport');
+            if (!viewport || viewport.dataset.bound === 'true') return;
+            viewport.dataset.bound = 'true';
+
+            viewport.addEventListener('dragstart', (event) => {
+                event.preventDefault();
+            });
+
+            viewport.addEventListener('pointerdown', (event) => {
+                if (!chartZoomState.active) return;
+                event.preventDefault();
+                chartZoomState.pointerId = event.pointerId;
+                chartZoomState.startX = event.clientX;
+                chartZoomState.startY = event.clientY;
+                chartZoomState.dragOriginX = chartZoomState.offsetX;
+                chartZoomState.dragOriginY = chartZoomState.offsetY;
+                viewport.classList.add('dragging');
+                viewport.setPointerCapture(event.pointerId);
+            });
+
+            viewport.addEventListener('pointermove', (event) => {
+                if (!chartZoomState.active || chartZoomState.pointerId !== event.pointerId) return;
+                chartZoomState.offsetX = chartZoomState.dragOriginX + (event.clientX - chartZoomState.startX);
+                chartZoomState.offsetY = chartZoomState.dragOriginY + (event.clientY - chartZoomState.startY);
+                clampChartZoomOffsets();
+                applyChartZoomTransform();
+            });
+
+            const releaseDrag = (event) => {
+                if (chartZoomState.pointerId !== event.pointerId) return;
+                chartZoomState.pointerId = null;
+                viewport.classList.remove('dragging');
+                if (viewport.hasPointerCapture(event.pointerId)) {
+                    viewport.releasePointerCapture(event.pointerId);
+                }
+            };
+
+            viewport.addEventListener('pointerup', releaseDrag);
+            viewport.addEventListener('pointercancel', releaseDrag);
+            viewport.addEventListener('wheel', (event) => {
+                if (!chartZoomState.active || !event.ctrlKey) return;
+                event.preventDefault();
+                const delta = event.deltaY < 0 ? 0.16 : -0.16;
+                chartZoomState.scale = Math.max(chartZoomState.minScale, Math.min(chartZoomState.maxScale, chartZoomState.scale + delta));
+                updateChartZoomBounds();
+            }, { passive: false });
+
+            window.addEventListener('resize', () => {
+                if (chartZoomState.active && modalChartState.chartId) {
+                    renderModalChart(modalChartState.chartId);
+                }
+            });
+
+            window.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && chartZoomState.active) {
+                    closeChartZoomModal();
+                }
+            });
+        }
+
+        function openChartZoomModal(cardId) {
+            const chartKey = getChartKeyFromCardId(cardId);
+            const modal = document.getElementById('chart-zoom-modal');
+            const title = document.getElementById('chart-zoom-title');
+            if (!chartKey || !modal || !title) return;
+
+            modalChartState.chartId = chartKey;
+            modalChartState.level = zoomLevels[chartZoomIndices[chartKey] || 0] || 'today';
+            modalChartState.tprMetric = chartKey === 'tpr' ? currentTPRMetric : 'all';
+
+            title.innerText = `${(document.getElementById(cardId)?.querySelector('h3')?.innerText) || '圖表'} 放大檢視`;
+            chartZoomState.active = true;
+            chartZoomState.fitScale = 1;
+            chartZoomState.scale = 1;
+            chartZoomState.offsetX = 0;
+            chartZoomState.offsetY = 0;
+            modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+
+            renderModalChart(chartKey);
+            lucide.createIcons();
+        }
+
+        function renderModalTPRClone(clone, level = 'today', metric = 'all') {
+            const dataPoints = tprRawData[level];
+            const length = dataPoints.length;
+            const startX = 40;
+            const endX = 270;
+            const stepX = (endX - startX) / (length - 1 || 1);
+            const yMax = 20;
+            const yMin = 140;
+
+            const mapValueToY = (val, minVal, maxVal) => {
+                const ratio = (val - minVal) / (maxVal - minVal || 1);
+                return yMin - ratio * (yMin - yMax);
+            };
+
+            let btRange, hrRange, rrRange, painRange;
+            if (metric === 'all') {
+                btRange = { min: 35.0, max: 40.0 };
+                hrRange = { min: 40, max: 160 };
+                rrRange = { min: 10, max: 30 };
+                painRange = { min: 0, max: 12 };
+            } else {
+                btRange = { min: 35.5, max: 39.5 };
+                hrRange = { min: 50, max: 140 };
+                rrRange = { min: 12, max: 28 };
+                painRange = { min: 0, max: 10 };
+            }
+
+            const buildPath = (coords) => {
+                if (!coords.length) return '';
+                let d = `M ${coords[0].x},${coords[0].y}`;
+                for (let i = 1; i < coords.length; i++) d += ` L ${coords[i].x},${coords[i].y}`;
+                return d;
+            };
+
+            const btCoords = [];
+            const hrCoords = [];
+            const rrCoords = [];
+            const painCoords = [];
+            dataPoints.forEach((dp, index) => {
+                const x = startX + index * stepX;
+                btCoords.push({ x, y: mapValueToY(dp.bt, btRange.min, btRange.max) });
+                hrCoords.push({ x, y: mapValueToY(dp.hr, hrRange.min, hrRange.max) });
+                rrCoords.push({ x, y: mapValueToY(dp.rr, rrRange.min, rrRange.max) });
+                painCoords.push({ x, y: mapValueToY(dp.pain, painRange.min, painRange.max) });
+            });
+
+            const byModalId = (id) => clone.querySelector(`[data-modal-id="${id}"]`);
+            const btPathEl = byModalId('path-tpr-bt');
+            const hrPathEl = byModalId('path-tpr-hr');
+            const rrPathEl = byModalId('path-tpr-rr');
+            const painPathEl = byModalId('path-tpr-pain');
+            const btHitEl = byModalId('path-tpr-bt-hit');
+            const hrHitEl = byModalId('path-tpr-hr-hit');
+            const rrHitEl = byModalId('path-tpr-rr-hit');
+            const painHitEl = byModalId('path-tpr-pain-hit');
+            const gridEl = byModalId('tpr-grid-lines');
+            const labelsEl = byModalId('tpr-labels-group');
+            const dotsEl = byModalId('tpr-dots-group');
+            const yLabelsEl = byModalId('tpr-y-labels-group');
+            const rangeTextEl = byModalId('tpr-range-text');
+            const rangeBadgeEl = byModalId('tpr-range-badge');
+            const resetBtn = byModalId('tpr-reset-btn');
+            const hintEl = byModalId('tpr-interactive-hint');
+            const modalResetBtn = clone.parentElement?.querySelector('[data-modal-tpr-reset]');
+            const modalButtons = clone.parentElement?.querySelectorAll('[data-modal-tpr-metric]');
+
+            const btPath = buildPath(btCoords);
+            const hrPath = buildPath(hrCoords);
+            const rrPath = buildPath(rrCoords);
+            const painPath = buildPath(painCoords);
+            if (btPathEl) btPathEl.setAttribute('d', btPath);
+            if (hrPathEl) hrPathEl.setAttribute('d', hrPath);
+            if (rrPathEl) rrPathEl.setAttribute('d', rrPath);
+            if (painPathEl) painPathEl.setAttribute('d', painPath);
+            if (btHitEl) btHitEl.setAttribute('d', btPath);
+            if (hrHitEl) hrHitEl.setAttribute('d', hrPath);
+            if (rrHitEl) rrHitEl.setAttribute('d', rrPath);
+            if (painHitEl) painHitEl.setAttribute('d', painPath);
+
+            if (metric === 'all') {
+                if (btPathEl) { btPathEl.style.opacity = '1'; btPathEl.setAttribute('stroke-width', '2.5'); }
+                if (hrPathEl) { hrPathEl.style.opacity = '1'; hrPathEl.setAttribute('stroke-width', '2'); }
+                if (rrPathEl) { rrPathEl.style.opacity = '1'; rrPathEl.setAttribute('stroke-width', '1.8'); }
+                if (painPathEl) { painPathEl.style.opacity = '1'; painPathEl.setAttribute('stroke-width', '1.5'); }
+                if (resetBtn) resetBtn.classList.add('hidden');
+                if (modalResetBtn) modalResetBtn.classList.add('hidden');
+                if (hintEl) hintEl.classList.remove('opacity-0');
+            } else {
+                if (btPathEl) { btPathEl.style.opacity = metric === 'bt' ? '1' : '0.12'; btPathEl.setAttribute('stroke-width', metric === 'bt' ? '3.5' : '2.5'); }
+                if (hrPathEl) { hrPathEl.style.opacity = metric === 'hr' ? '1' : '0.12'; hrPathEl.setAttribute('stroke-width', metric === 'hr' ? '3.5' : '2'); }
+                if (rrPathEl) { rrPathEl.style.opacity = metric === 'rr' ? '1' : '0.12'; rrPathEl.setAttribute('stroke-width', metric === 'rr' ? '3.2' : '1.8'); }
+                if (painPathEl) { painPathEl.style.opacity = metric === 'pain' ? '1' : '0.12'; painPathEl.setAttribute('stroke-width', metric === 'pain' ? '3' : '1.5'); }
+                if (resetBtn) resetBtn.classList.remove('hidden');
+                if (modalResetBtn) modalResetBtn.classList.remove('hidden');
+                if (hintEl) hintEl.classList.add('opacity-0');
+            }
+
+            if (modalButtons?.length) {
+                modalButtons.forEach((btn) => {
+                    const btnMetric = btn.getAttribute('data-modal-tpr-metric');
+                    if (btnMetric === metric) {
+                        btn.className = 'px-2.5 py-1 rounded-md text-[11px] font-bold bg-white text-blue-700 shadow-sm transition';
+                    } else {
+                        btn.className = 'px-2.5 py-1 rounded-md text-[11px] text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition';
+                    }
+                });
+            }
+
+            if (rangeTextEl) rangeTextEl.innerText = `顯示 ${zoomLabelMap[level]} TPR 趨勢`;
+            if (rangeBadgeEl) rangeBadgeEl.innerText = zoomLabelMap[level];
+
+            if (yLabelsEl) {
+                let yLabelHtml = '';
+                if (metric === 'rr') {
+                    yLabelHtml = `
+                        <text x="25" y="24" font-size="7" fill="#10b981" font-weight="bold" text-anchor="end">28 /min</text>
+                        <text x="25" y="54" font-size="7" fill="#10b981" text-anchor="end">24 /min</text>
+                        <text x="25" y="84" font-size="7" fill="#10b981" text-anchor="end">20 /min</text>
+                        <text x="25" y="114" font-size="7" fill="#10b981" text-anchor="end">16 /min</text>
+                        <text x="25" y="144" font-size="7" fill="#10b981" text-anchor="end">12 /min</text>
+                    `;
+                } else if (metric === 'all') {
+                    yLabelHtml = `
+                        <text x="25" y="24" font-size="6.5" fill="#ef4444" font-weight="bold" text-anchor="end">39°C</text>
+                        <text x="25" y="46" font-size="6.5" fill="#10b981" font-weight="bold" text-anchor="end">RR 24</text>
+                        <text x="25" y="68" font-size="6.5" fill="#f59e0b" font-weight="bold" text-anchor="end">Pain(7)</text>
+                        <text x="25" y="113" font-size="6.5" fill="#3b82f6" font-weight="bold" text-anchor="end">70 bpm</text>
+                    `;
+                } else if (metric === 'bt') {
+                    yLabelHtml = `
+                        <text x="25" y="24" font-size="7" fill="#ef4444" font-weight="bold" text-anchor="end">39.5°C</text>
+                        <text x="25" y="54" font-size="7" fill="#ef4444" text-anchor="end">38.5°C</text>
+                        <text x="25" y="84" font-size="7" fill="#ef4444" text-anchor="end">37.5°C</text>
+                        <text x="25" y="114" font-size="7" fill="#ef4444" text-anchor="end">36.5°C</text>
+                        <text x="25" y="144" font-size="7" fill="#ef4444" text-anchor="end">35.5°C</text>
+                    `;
+                } else if (metric === 'hr') {
+                    yLabelHtml = `
+                        <text x="25" y="24" font-size="7" fill="#3b82f6" font-weight="bold" text-anchor="end">140 bpm</text>
+                        <text x="25" y="54" font-size="7" fill="#3b82f6" text-anchor="end">120 bpm</text>
+                        <text x="25" y="84" font-size="7" fill="#3b82f6" text-anchor="end">100 bpm</text>
+                        <text x="25" y="114" font-size="7" fill="#3b82f6" text-anchor="end">80 bpm</text>
+                        <text x="25" y="144" font-size="7" fill="#3b82f6" text-anchor="end">60 bpm</text>
+                    `;
+                } else {
+                    yLabelHtml = `
+                        <text x="25" y="24" font-size="7" fill="#f59e0b" font-weight="bold" text-anchor="end">10</text>
+                        <text x="25" y="54" font-size="7" fill="#f59e0b" text-anchor="end">8</text>
+                        <text x="25" y="84" font-size="7" fill="#f59e0b" text-anchor="end">6</text>
+                        <text x="25" y="114" font-size="7" fill="#f59e0b" text-anchor="end">4</text>
+                        <text x="25" y="144" font-size="7" fill="#f59e0b" text-anchor="end">0</text>
+                    `;
+                }
+                yLabelsEl.innerHTML = yLabelHtml;
+            }
+
+            if (gridEl) {
+                let gridHtml = '';
+                dataPoints.forEach((dp, index) => {
+                    const x = startX + index * stepX;
+                    gridHtml += `<line x1="${x}" y1="20" x2="${x}" y2="150" stroke="#e2e8f0" stroke-width="0.8" stroke-dasharray="2,2" />`;
+                });
+                gridEl.innerHTML = gridHtml;
+            }
+
+            if (dotsEl) {
+                let dotsHtml = '';
+                dataPoints.forEach((dp, index) => {
+                    const x = startX + index * stepX;
+                    if (metric === 'all' || metric === 'bt') {
+                        const y = mapValueToY(dp.bt, btRange.min, btRange.max);
+                        dotsHtml += `<circle cx="${x}" cy="${y}" r="3.5" fill="#f43f5e" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                            onmouseover="showTooltip(event, '體溫 (BT)', '時間: ${dp.time}<br>數值: <b>${dp.bt} °C</b><br>狀態: ${dp.bt >= 38.0 ? "⚠️ 發燒" : "正常"}')"
+                            onmousemove="moveTooltip(event)"
+                            onmouseout="hideTooltip(event)" />`;
+                    }
+                    if (metric === 'all' || metric === 'hr') {
+                        const y = mapValueToY(dp.hr, hrRange.min, hrRange.max);
+                        dotsHtml += `<circle cx="${x}" cy="${y}" r="3.5" fill="#3b82f6" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                            onmouseover="showTooltip(event, '心跳 (HR)', '時間: ${dp.time}<br>數值: <b>${dp.hr} bpm</b><br>狀態: ${dp.hr >= 100 ? "⚠️ 過速" : "正常"}')"
+                            onmousemove="moveTooltip(event)"
+                            onmouseout="hideTooltip(event)" />`;
+                    }
+                    if (metric === 'all' || metric === 'rr') {
+                        const y = mapValueToY(dp.rr, rrRange.min, rrRange.max);
+                        dotsHtml += `<circle cx="${x}" cy="${y}" r="3.5" fill="#10b981" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                            onmouseover="showTooltip(event, 'Respiration (RR)', 'Time: ${dp.time}<br>Value: <b>${dp.rr} /min</b><br>Status: ${dp.rr >= 22 ? 'Fast' : 'Stable'}')"
+                            onmousemove="moveTooltip(event)"
+                            onmouseout="hideTooltip(event)" />`;
+                    }
+                    if (metric === 'all' || metric === 'pain') {
+                        const y = mapValueToY(dp.pain, painRange.min, painRange.max);
+                        dotsHtml += `<circle cx="${x}" cy="${y}" r="3.5" fill="#f59e0b" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                            onmouseover="showTooltip(event, '疼痛強度 (Pain)', '時間: ${dp.time}<br>疼痛VAS評分: <b>${dp.pain} /10 分</b>')"
+                            onmousemove="moveTooltip(event)"
+                            onmouseout="hideTooltip(event)" />`;
+                    }
+                });
+                dotsEl.innerHTML = dotsHtml;
+            }
+
+            if (labelsEl) {
+                let labelsHtml = '';
+                const labelInterval = length > 6 ? 2 : 1;
+                dataPoints.forEach((dp, index) => {
+                    if (index % labelInterval === 0 || index === length - 1) {
+                        const x = startX + index * stepX;
+                        labelsHtml += `<text x="${x}" y="165" font-size="7" fill="#64748b" text-anchor="middle">${dp.time}</text>`;
+                    }
+                });
+                labelsEl.innerHTML = labelsHtml;
+            }
+        }
+
+        function wireModalTPRInteractions(clone) {
+            let metric = currentTPRMetric;
+            const level = zoomLevels[chartZoomIndices.tpr] || 'today';
+            const byModalId = (id) => clone.querySelector(`[data-modal-id="${id}"]`);
+            const controlsRoot = clone.parentElement;
+            const buttonGroup = controlsRoot?.querySelector('.shadow-inner');
+
+            if (buttonGroup && !buttonGroup.querySelector('[data-modal-tpr-metric="rr"]')) {
+                const rrButton = document.createElement('button');
+                rrButton.type = 'button';
+                rrButton.setAttribute('data-modal-tpr-metric', 'rr');
+                rrButton.className = 'px-2.5 py-1 rounded-md text-[11px] text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition';
+                rrButton.textContent = '呼吸';
+                const painButton = buttonGroup.querySelector('[data-modal-tpr-metric="pain"]');
+                buttonGroup.insertBefore(rrButton, painButton || null);
+            }
+
+            const setMetric = (nextMetric) => {
+                metric = nextMetric;
+                renderModalTPRClone(clone, level, metric);
+            };
+
+            [
+                [byModalId('path-tpr-bt'), 'bt'],
+                [byModalId('path-tpr-hr'), 'hr'],
+                [byModalId('path-tpr-rr'), 'rr'],
+                [byModalId('path-tpr-pain'), 'pain'],
+                [byModalId('path-tpr-bt-hit'), 'bt'],
+                [byModalId('path-tpr-hr-hit'), 'hr'],
+                [byModalId('path-tpr-rr-hit'), 'rr'],
+                [byModalId('path-tpr-pain-hit'), 'pain']
+            ].forEach(([el, nextMetric]) => {
+                if (el) el.addEventListener('click', () => setMetric(nextMetric));
+            });
+
+            const resetBtn = byModalId('tpr-reset-btn');
+            if (resetBtn) resetBtn.addEventListener('click', () => setMetric('all'));
+            const modalResetBtn = controlsRoot?.querySelector('[data-modal-tpr-reset]');
+            if (modalResetBtn) {
+                modalResetBtn.addEventListener('pointerdown', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                });
+                modalResetBtn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setMetric('all');
+                });
+            }
+
+            controlsRoot?.querySelectorAll('[data-modal-tpr-metric]').forEach((btn) => {
+                btn.addEventListener('pointerdown', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                });
+                btn.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setMetric(btn.getAttribute('data-modal-tpr-metric'));
+                });
+            });
+
+            const legendSpans = clone.querySelectorAll('span.cursor-pointer');
+            if (legendSpans[0]) legendSpans[0].addEventListener('click', () => setMetric('bt'));
+            if (legendSpans[1]) legendSpans[1].addEventListener('click', () => setMetric('hr'));
+            if (legendSpans[2]) legendSpans[2].addEventListener('click', () => setMetric('rr'));
+            if (legendSpans[3]) legendSpans[3].addEventListener('click', () => setMetric('pain'));
+
+            renderModalTPRClone(clone, level, metric);
+        }
+
+        function openChartZoomModal(cardId) {
+            const card = document.getElementById(cardId);
+            const source = getChartZoomSource(card);
+            const modal = document.getElementById('chart-zoom-modal');
+            const content = document.getElementById('chart-zoom-content');
+            const title = document.getElementById('chart-zoom-title');
+            if (!card || !source || !modal || !content || !title) return;
+
+            const clone = normalizeZoomCloneIds(source.cloneNode(true));
+            clone.classList.add('chart-zoom-clone');
+
+            content.innerHTML = '';
+            if (cardId === 'chart-card-tpr') {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'flex flex-col gap-2';
+                wrapper.innerHTML = `
+                    <div class="flex items-center justify-between gap-2 px-1">
+                        <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg shadow-inner">
+                            <button type="button" data-modal-tpr-metric="bt" class="px-2.5 py-1 rounded-md text-[11px] text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition">體溫</button>
+                            <button type="button" data-modal-tpr-metric="hr" class="px-2.5 py-1 rounded-md text-[11px] text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition">心跳</button>
+                            <button type="button" data-modal-tpr-metric="pain" class="px-2.5 py-1 rounded-md text-[11px] text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition">疼痛</button>
+                            <button type="button" data-modal-tpr-metric="all" class="px-2.5 py-1 rounded-md text-[11px] text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 transition">全部</button>
+                        </div>
+                        <button type="button" data-modal-tpr-reset class="hidden text-[11px] font-bold bg-slate-200 hover:bg-blue-600 hover:text-white text-slate-700 px-2.5 py-1 rounded transition">顯示全部</button>
+                    </div>
+                `;
+                wrapper.appendChild(clone);
+                content.appendChild(wrapper);
+            } else {
+                content.appendChild(clone);
+            }
+            title.innerText = `${card.querySelector('h3')?.innerText || '圖表'} 放大檢視`;
+
+            if (cardId === 'chart-card-tpr') {
+                wireModalTPRInteractions(clone);
+            }
+
+            chartZoomState.active = true;
+            chartZoomState.fitScale = 1;
+            chartZoomState.scale = 1;
+            chartZoomState.offsetX = 0;
+            chartZoomState.offsetY = 0;
+            modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+
+            lucide.createIcons();
+            requestAnimationFrame(() => {
+                fitChartZoomToViewport();
+            });
+        }
+
+        let isNeedleVisible = false;
+        function toggleNeedlePrivacy() {
+            const box = document.getElementById('needle-privacy-box');
+            const btn = document.getElementById('needle-reveal-btn');
+            
+            isNeedleVisible = !isNeedleVisible;
+            if (isNeedleVisible) {
+                box.classList.remove('hidden');
+                btn.innerHTML = `<i data-lucide="eye-off" class="w-3.5 h-3.5"></i> <span>隱藏保護</span>`;
+                btn.classList.replace('bg-slate-100', 'bg-rose-100');
+                btn.classList.replace('text-slate-700', 'text-rose-700');
+            } else {
+                box.classList.add('hidden');
+                btn.innerHTML = `<i data-lucide="eye" class="w-3.5 h-3.5"></i> <span>安全解鎖</span>`;
+                btn.classList.replace('bg-rose-100', 'bg-slate-100');
+                btn.classList.replace('text-rose-700', 'text-slate-705');
+            }
+            lucide.createIcons();
+        }
+
+        // ================= 26 支 API 結構化原始數值與時序對照 =================
+        // 改用數值結構，以支援 Y 軸動態重繪與多視角轉換
+        const tprRawData = {
+            today: [
+                { time: "00:00", bt: 37.1, hr: 88, rr: 18, pain: 2 },
+                { time: "04:00", bt: 37.3, hr: 95, rr: 20, pain: 3 },
+                { time: "今日 08:00", bt: 38.2, hr: 112, rr: 24, pain: 5 }
+            ],
+            "3days": [
+                { time: "6/15", bt: 36.8, hr: 82, rr: 16, pain: 3 },
+                { time: "6/16 08:00", bt: 37.0, hr: 84, rr: 17, pain: 2 },
+                { time: "6/16 20:00", bt: 37.1, hr: 88, rr: 18, pain: 3 },
+                { time: "6/17 04:00", bt: 37.7, hr: 102, rr: 22, pain: 4 },
+                { time: "今日 08:00", bt: 38.2, hr: 112, rr: 24, pain: 5 }
+            ],
+            week: [
+                { time: "6/11", bt: 36.5, hr: 78, rr: 15, pain: 4 },
+                { time: "6/12", bt: 36.6, hr: 80, rr: 16, pain: 3 },
+                { time: "6/13", bt: 36.9, hr: 82, rr: 16, pain: 3 },
+                { time: "6/14", bt: 36.8, hr: 85, rr: 17, pain: 2 },
+                { time: "6/15", bt: 37.1, hr: 88, rr: 18, pain: 2 },
+                { time: "6/16", bt: 37.0, hr: 95, rr: 19, pain: 3 },
+                { time: "6/17 00:00", bt: 37.5, hr: 102, rr: 21, pain: 4 },
+                { time: "今日 08:00", bt: 38.2, hr: 112, rr: 24, pain: 5 }
+            ],
+            full: [
+                { time: "6/9", bt: 36.1, hr: 75, rr: 14, pain: 1 },
+                { time: "6/10", bt: 36.3, hr: 76, rr: 15, pain: 2 },
+                { time: "6/11", bt: 36.5, hr: 78, rr: 15, pain: 4 },
+                { time: "6/12", bt: 36.4, hr: 79, rr: 16, pain: 3 },
+                { time: "6/13", bt: 36.6, hr: 80, rr: 16, pain: 3 },
+                { time: "6/14", bt: 36.8, hr: 82, rr: 17, pain: 2 },
+                { time: "6/15", bt: 36.9, hr: 85, rr: 18, pain: 2 },
+                { time: "6/16", bt: 37.1, hr: 88, rr: 19, pain: 3 },
+                { time: "6/17 00:00", bt: 37.7, hr: 102, rr: 21, pain: 4 },
+                { time: "今日 08:00", bt: 38.2, hr: 112, rr: 24, pain: 5 }
+            ]
+        };
+
+        const chartDataStore = {
+            sugar: {
+                today: {
+                    path: "M 40,105 L 150,62 L 260,20",
+                    points: [
+                        {cx: 40, cy: 105, val: "時間: 6/17 07:00<br>飯前血糖: 210 mg/dL ⚠️<br>已皮下注射 RI 8U"},
+                        {cx: 150, cy: 62, val: "時間: 6/17 09:30<br>隨機血糖: 280 mg/dL ⚠️<br>疑似發燒應激性高血糖"},
+                        {cx: 260, cy: 20, val: "時間: 6/17 11:30 (最新)<br>追蹤血糖: 250 mg/dL ⚠️"}
+                    ],
+                    timeline: [
+                        {title: "07:00", val: "RI 8U"}, {title: "09:30", val: "280 ⚠️"}, {title: "11:30", val: "250"}, {title: "17:00 預計", val: "追蹤"}
+                    ],
+                    badge: "當天",
+                    rangeText: "顯示今日最近 24 小時血糖波動"
+                },
+                "3days": {
+                    path: "M 40,80 L 95,105 L 150,62 L 205,20 L 260,40",
+                    points: [
+                        {cx: 40, cy: 80, val: "時間: 6/15 睡前<br>血糖值: 135 mg/dL"},
+                        {cx: 95, cy: 105, val: "時間: 6/16 07:00<br>飯前血糖: 210 mg/dL ⚠️<br>注射速效 RI 8U"},
+                        {cx: 150, cy: 62, val: "時間: 6/16 09:30<br>隨機血糖: 280 mg/dL ⚠️"},
+                        {cx: 205, cy: 20, val: "時間: 6/17 07:00<br>隨機血糖: 280 mg/dL ⚠️"},
+                        {cx: 260, cy: 40, val: "時間: 今日 11:30<br>血糖值: 250 mg/dL ⚠️"}
+                    ],
+                    timeline: [
+                        {title: "6/15", val: "135"}, {title: "6/16 07:00", val: "RI 8U"}, {title: "6/17 07:00", val: "280 ⚠️"}, {title: "今日 11:30", val: "250"}
+                    ],
+                    badge: "3天",
+                    rangeText: "顯示過去 3 天應激性血糖起伏"
+                },
+                week: {
+                    path: "M 40,85 L 85,95 L 130,80 L 175,80 L 220,35 L 260,20",
+                    points: [
+                        {cx: 40, cy: 85, val: "時間: 6/11 術後<br>血糖值: 120 mg/dL"},
+                        {cx: 130, cy: 80, val: "時間: 6/13<br>血糖值: 135 mg/dL"},
+                        {cx: 220, cy: 35, val: "時間: 6/16<br>飯前血糖: 210 mg/dL ⚠️"},
+                        {cx: 260, cy: 20, val: "時間: 今日 07:00<br>飯前血糖: 280 mg/dL ⚠️"}
+                    ],
+                    timeline: [
+                        {title: "6/11", val: "120"}, {title: "6/13", val: "135"}, {title: "6/16", val: "210 ⚠️"}, {title: "今日 07:00", val: "280 ⚠️"}
+                    ],
+                    badge: "一週",
+                    rangeText: "顯示過去 7 天內血糖波動與胰島素注射對齊"
+                },
+                full: {
+                    path: "M 40,75 L 71,65 L 102,110 L 134,85 L 165,95 L 197,80 L 228,35 L 260,20",
+                    points: [
+                        {cx: 40, cy: 75, val: "時間: 6/9 (入院)<br>血糖值: 140 mg/dL"},
+                        {cx: 102, cy: 110, val: "時間: 6/11 (手術)<br>血糖值: 88 mg/dL"},
+                        {cx: 165, cy: 95, val: "時間: 6/13<br>血糖值: 110 mg/dL"},
+                        {cx: 228, cy: 35, val: "時間: 6/16<br>血糖值: 210 mg/dL ⚠️"},
+                        {cx: 260, cy: 20, val: "時間: 今日 09:30<br>血糖值: 280 mg/dL ⚠️"}
+                    ],
+                    timeline: [
+                        {title: "6/9", val: "140"}, {title: "6/11", val: "88"}, {title: "6/13", val: "110"}, {title: "今日", val: "280 ⚠️"}
+                    ],
+                    badge: "全程",
+                    rangeText: "顯示住院 8 天全程血糖控制史 (API 11 聯動)"
+                }
+            },
+            io: {
+                today: [
+                    {x1: 110, x2: 125, text: "6/17", h1: 65, h2: 50}
+                ],
+                "3days": [
+                    {x1: 50, x2: 62, text: "6/15", h1: 68, h2: 60},
+                    {x1: 130, x2: 142, text: "6/16", h1: 60, h2: 58},
+                    {x1: 210, x2: 222, text: "6/17", h1: 65, h2: 50}
+                ],
+                week: [
+                    {x1: 40, x2: 48, text: "6/11", h1: 50, h2: 45},
+                    {x1: 80, x2: 88, text: "6/12", h1: 52, h2: 42},
+                    {x1: 120, x2: 128, text: "6/14", h1: 58, h2: 50},
+                    {x1: 160, x2: 168, text: "6/15", h1: 68, h2: 60},
+                    {x1: 200, x2: 208, text: "6/17", h1: 65, h2: 50}
+                ],
+                full: [
+                    {x1: 35, x2: 43, text: "6/9", h1: 52, h2: 40},
+                    {x1: 70, x2: 78, text: "6/11", h1: 50, h2: 45},
+                    {x1: 105, x2: 113, text: "6/12", h1: 52, h2: 42},
+                    {x1: 140, x2: 148, text: "6/13", h1: 55, h2: 50},
+                    {x1: 175, x2: 183, text: "6/15", h1: 68, h2: 60},
+                    {x1: 210, x2: 218, text: "6/17", h1: 65, h2: 50}
+                ]
+            },
+            lab: {
+                today: {
+                    wbc: "M 40,65 L 260,25",
+                    crp: "M 40,75 L 260,35",
+                    points: [
+                        {cx: 40, cy: 65, val: "時間: 6/16 (昨日)<br>WBC: 9,800 /uL (正常偏高)"},
+                        {cx: 260, cy: 25, val: "時間: 今日 6/17 (最新) ⚠️<br>WBC: 14,200 /uL ⚠️ 高值<br>CRP: 4.2 mg/dL ⚠️ 高值"}
+                    ],
+                    labels: [
+                        {x: 40, text: "6/16"}, {x: 260, text: "今日 6/17"}
+                    ],
+                    badge: "當天",
+                    rangeText: "顯示今日與昨日發炎指標比較"
+                },
+                "3days": {
+                    wbc: "M 40,75 L 150,65 L 260,25",
+                    crp: "M 40,90 L 150,75 L 260,35",
+                    points: [
+                        {cx: 40, cy: 75, val: "時間: 6/15<br>WBC: 9,200 /uL<br>CRP: 1.5 mg/dL"},
+                        {cx: 150, cy: 65, val: "時間: 6/16<br>WBC: 9,800 /uL<br>CRP: 1.8 mg/dL"},
+                        {cx: 260, cy: 25, val: "時間: 今日 6/17 ⚠️<br>WBC: 14,200 /uL ⚠️<br>CRP: 4.2 mg/dL ⚠️"}
+                    ],
+                    labels: [
+                        {x: 40, text: "6/15"}, {x: 150, text: "6/16"}, {x: 260, text: "今日"}
+                    ],
+                    badge: "3天",
+                    rangeText: "顯示過去 3 天發炎指標變化"
+                },
+                week: {
+                    wbc: "M 40,88 L 110,85 L 180,65 L 260,25",
+                    crp: "M 40,95 L 110,92 L 180,75 L 260,35",
+                    points: [
+                        {cx: 40, cy: 88, val: "時間: 6/11 (手術首日)<br>WBC: 7,200 /uL<br>CRP: 0.8 mg/dL"},
+                        {cx: 110, cy: 85, val: "時間: 6/13 (術後D2)<br>WBC: 7,500 /uL<br>CRP: 1.0 mg/dL"},
+                        {cx: 180, cy: 65, val: "時間: 6/16 (昨日)<br>WBC: 9,800 /uL<br>CRP: 1.5 mg/dL"},
+                        {cx: 260, cy: 25, val: "時間: 今日 6/17 ⚠️<br>WBC: 14,200 /uL ⚠️<br>CRP: 4.2 mg/dL ⚠️"}
+                    ],
+                    labels: [
+                        {x: 40, text: "6/11 (術後)"}, {x: 110, text: "6/13"}, {x: 180, text: "6/16"}, {x: 260, text: "今日"}
+                    ],
+                    badge: "一週",
+                    rangeText: "顯示術後一週內發炎指針攀升過程"
+                },
+                full: {
+                    wbc: "M 40,95 L 75,92 L 110,88 L 145,85 L 180,78 L 215,65 L 260,25",
+                    crp: "M 40,105 L 75,102 L 110,95 L 145,92 L 180,90 L 215,75 L 260,35",
+                    points: [
+                        {cx: 40, cy: 95, val: "時間: 6/9 (入院)<br>WBC: 6,800 /uL<br>CRP: 0.3 mg/dL"},
+                        {cx: 110, cy: 88, val: "時間: 6/11 (手術)<br>WBC: 7,200 /uL<br>CRP: 0.8 mg/dL"},
+                        {cx: 180, cy: 78, val: "時間: 6/15<br>WBC: 9,800 /uL<br>CRP: 1.5 mg/dL"},
+                        {cx: 260, cy: 25, val: "時間: 今日 6/17 ⚠️<br>WBC: 14,200 /uL ⚠️<br>CRP: 4.2 mg/dL ⚠️"}
+                    ],
+                    labels: [
+                        {x: 40, text: "6/9"}, {x: 110, text: "6/11"}, {x: 180, text: "6/15"}, {x: 260, text: "今日"}
+                    ],
+                    badge: "全程",
+                    rangeText: "顯示住院全程發炎指標軌跡 (CRP對比)"
+                }
+            }
+        };
+
+        // 4段時序層級對照表
+        const zoomLevels = ['today', '3days', 'week', 'full'];
+        const zoomLabelMap = {
+            today: "當天",
+            "3days": "3天",
+            week: "一週",
+            full: "全程"
+        };
+
+        const labSeriesStore = {
+            today: {
+                points: [
+                    { label: "6/16", wbc: 9800, crp: 1.8, tooltip: "時間: 6/16 (昨日)<br>WBC: 9,800 /uL<br>CRP: 1.8 mg/dL" },
+                    { label: "今日 6/17", wbc: 14200, crp: 4.2, tooltip: "時間: 今日 6/17 (最新) ⚠️<br>WBC: 14,200 /uL ⚠️<br>CRP: 4.2 mg/dL ⚠️" }
+                ],
+                badge: "當天",
+                rangeText: "顯示最近兩次發炎指標變化，WBC 與 CRP 分開監看"
+            },
+            "3days": {
+                points: [
+                    { label: "6/15", wbc: 9200, crp: 1.5, tooltip: "時間: 6/15<br>WBC: 9,200 /uL<br>CRP: 1.5 mg/dL" },
+                    { label: "6/16", wbc: 9800, crp: 1.8, tooltip: "時間: 6/16<br>WBC: 9,800 /uL<br>CRP: 1.8 mg/dL" },
+                    { label: "今日", wbc: 14200, crp: 4.2, tooltip: "時間: 今日 6/17 ⚠️<br>WBC: 14,200 /uL ⚠️<br>CRP: 4.2 mg/dL ⚠️" }
+                ],
+                badge: "3天",
+                rangeText: "顯示近 3 天 WBC 與 CRP 的分流趨勢"
+            },
+            week: {
+                points: [
+                    { label: "6/11", wbc: 7200, crp: 0.8, tooltip: "時間: 6/11 (手術首日)<br>WBC: 7,200 /uL<br>CRP: 0.8 mg/dL" },
+                    { label: "6/13", wbc: 7500, crp: 1.0, tooltip: "時間: 6/13 (術後 D2)<br>WBC: 7,500 /uL<br>CRP: 1.0 mg/dL" },
+                    { label: "6/16", wbc: 9800, crp: 1.5, tooltip: "時間: 6/16 (昨日)<br>WBC: 9,800 /uL<br>CRP: 1.5 mg/dL" },
+                    { label: "今日", wbc: 14200, crp: 4.2, tooltip: "時間: 今日 6/17 ⚠️<br>WBC: 14,200 /uL ⚠️<br>CRP: 4.2 mg/dL ⚠️" }
+                ],
+                badge: "一週",
+                rangeText: "顯示術後一週內發炎指標變化"
+            },
+            full: {
+                points: [
+                    { label: "6/9", wbc: 6800, crp: 0.3, tooltip: "時間: 6/9 (入院)<br>WBC: 6,800 /uL<br>CRP: 0.3 mg/dL" },
+                    { label: "6/11", wbc: 7200, crp: 0.8, tooltip: "時間: 6/11 (手術)<br>WBC: 7,200 /uL<br>CRP: 0.8 mg/dL" },
+                    { label: "6/15", wbc: 9800, crp: 1.5, tooltip: "時間: 6/15<br>WBC: 9,800 /uL<br>CRP: 1.5 mg/dL" },
+                    { label: "今日", wbc: 14200, crp: 4.2, tooltip: "時間: 今日 6/17 ⚠️<br>WBC: 14,200 /uL ⚠️<br>CRP: 4.2 mg/dL ⚠️" }
+                ],
+                badge: "全程",
+                rangeText: "顯示住院全程發炎指標軌跡，WBC 與 CRP 分開呈現"
+            }
+        };
+
+        // 獨立追踪各個圖表當前的縮放狀態索引
+        const chartZoomIndices = {
+            tpr: 0,   // 預設為 'today'
+            sugar: 0,
+            io: 0,
+            lab: 0
+        };
+
+        // TPR 當前高亮的單一線段狀態 ('all', 'bt', 'hr', 'rr', 'pain')
+        let currentTPRMetric = 'all';
+
+        // ================= 核心：Tab 直切切換邏輯 =================
+        function switchChartLevel(chartId, level) {
+            const targetIndex = zoomLevels.indexOf(level);
+            if (targetIndex !== -1) {
+                chartZoomIndices[chartId] = targetIndex;
+                executeZoomAnimation(chartId, level);
+            }
+        }
+
+        // ================= 動態執行縮放與 Tab 樣式重繪 =================
+        function executeZoomAnimation(chartId, level) {
+            const loader = document.getElementById(`loading-${chartId}`);
+            
+            // 啟用局部讀取遮罩
+            if (loader) {
+                loader.classList.remove('hidden');
+                setTimeout(() => {
+                    loader.classList.add('hidden');
+                    triggerRender(chartId, level);
+                    updateTabUI(chartId, level);
+                }, 250);
+            } else {
+                triggerRender(chartId, level);
+                updateTabUI(chartId, level);
+            }
+        }
+
+        // ================= 動態變更 Tab 控制器高亮狀態 =================
+        function updateTabUI(chartId, activeLevel) {
+            zoomLevels.forEach(lvl => {
+                const btn = document.getElementById(`tab-${chartId}-${lvl}`);
+                if (btn) {
+                    if (lvl === activeLevel) {
+                        btn.className = "px-2 py-0.5 rounded text-[9px] transition bg-white text-blue-700 shadow-sm font-bold whitespace-nowrap";
+                    } else {
+                        btn.className = "px-2 py-0.5 rounded text-[9px] transition text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 whitespace-nowrap";
+                    }
+                }
+            });
+        }
+
+        // ================= 核心：滑鼠動態跟隨 Tooltip 邏輯 =================
+        function showTooltip(event, title, content) {
+            const container = event.currentTarget.closest('.relative');
+            const tooltip = container.querySelector('.chart-tooltip');
+            if (!tooltip) return;
+
+            tooltip.querySelector('.tooltip-title').innerText = title;
+            tooltip.querySelector('.tooltip-content').innerHTML = content;
+            tooltip.classList.remove('hidden');
+
+            moveTooltip(event);
+        }
+
+        function moveTooltip(event) {
+            const container = event.currentTarget.closest('.relative');
+            const tooltip = container.querySelector('.chart-tooltip');
+            if (!tooltip) return;
+
+            const rect = container.getBoundingClientRect();
+            // 計算滑鼠在相對容器內的座標
+            const x = event.clientX - rect.left + 12;
+            const y = event.clientY - rect.top - 62; // 略微浮動在游標上方
+
+            tooltip.style.left = `${x}px`;
+            tooltip.style.top = `${y}px`;
+        }
+
+        function hideTooltip(event) {
+            const container = event.currentTarget.closest('.relative');
+            const tooltip = container.querySelector('.chart-tooltip');
+            if (tooltip) {
+                tooltip.classList.add('hidden');
+            }
+        }
+
+        // ================= 核心：TPR 線段點擊動態 Y 軸重繪功能 =================
+        function switchTPRMetric(metricId) {
+            currentTPRMetric = metricId;
+            const resetBtn = document.getElementById('tpr-reset-btn');
+            const hint = document.getElementById('tpr-interactive-hint');
+
+            if (metricId === 'all') {
+                resetBtn.classList.add('hidden');
+                hint.classList.remove('opacity-0');
+                showToast("顯示全部數據", "圖表已恢復三維度（體溫、心跳、疼痛）疊加綜合顯示。");
+            } else {
+                resetBtn.classList.remove('hidden');
+                hint.classList.add('opacity-0');
+                const nameMap = { bt: "體溫 (BT)", hr: "脈搏 (HR)", rr: "呼吸 (RR)", pain: "疼痛分數" };
+                showToast(`已切換至 ${nameMap[metricId]} 專屬視角`, "Y軸數值與刻度尺已自動重繪，可獲得最精確之臨床趨勢波動。");
+            }
+
+            // 重新繪製 TPR 折線圖
+            const currentLevel = zoomLevels[chartZoomIndices.tpr];
+            renderTPRChart(currentLevel);
+        }
+
+        // ================= 各圖表獨立渲染引擎 =================
+        function renderTPRChart(level = 'today') {
+            const dataPoints = tprRawData[level];
+            const length = dataPoints.length;
+            
+            // X 座標分配機制
+            const startX = 40;
+            const endX = 270;
+            const stepX = (endX - startX) / (length - 1 || 1);
+
+            // 定義各個指標在「全部模式(all)」與「單一模式」下的 Y 座標映射區間
+            // SVG Canvas 高度為 180px，有效 Y 軸作圖區設在 20px (頂) 到 140px (底) 之間
+            const yMax = 20;
+            const yMin = 140;
+
+            const mapValueToY = (val, minVal, maxVal) => {
+                const ratio = (val - minVal) / (maxVal - minVal || 1);
+                return yMin - ratio * (yMin - yMax);
+            };
+
+            // 1. 決定三個數值的 Y 軸範圍
+            let btRange, hrRange, painRange;
+            if (currentTPRMetric === 'all') {
+                // 疊加模式下，為了讓三條線彼此不重疊，給予適當的對照視覺間距
+                btRange = { min: 35.0, max: 40.0 };   // 體溫通常在35-40
+                hrRange = { min: 40, max: 160 };     // 心跳通常在40-160
+                rrRange = { min: 10, max: 30 };
+                painRange = { min: 0, max: 12 };     // 疼痛0-12
+            } else {
+                // 單一模式下，Y軸拉滿至最佳視覺化高度
+                btRange = { min: 35.5, max: 39.5 };
+                hrRange = { min: 50, max: 140 };
+                rrRange = { min: 12, max: 28 };
+                painRange = { min: 0, max: 10 };
+            }
+
+            // 2. 計算各個節點座標並建構 path
+            let btCoords = [], hrCoords = [], rrCoords = [], painCoords = [];
+            dataPoints.forEach((dp, index) => {
+                const x = startX + index * stepX;
+                btCoords.push({ x, y: mapValueToY(dp.bt, btRange.min, btRange.max), val: dp.bt });
+                hrCoords.push({ x, y: mapValueToY(dp.hr, hrRange.min, hrRange.max), val: dp.hr });
+                rrCoords.push({ x, y: mapValueToY(dp.rr, rrRange.min, rrRange.max), val: dp.rr });
+                painCoords.push({ x, y: mapValueToY(dp.pain, painRange.min, painRange.max), val: dp.pain });
+            });
+
+            const buildSVGPath = (coords) => {
+                if (coords.length === 0) return "";
+                let d = `M ${coords[0].x},${coords[0].y}`;
+                for (let i = 1; i < coords.length; i++) {
+                    d += ` L ${coords[i].x},${coords[i].y}`;
+                }
+                return d;
+            };
+
+            // 3. 設定 Path d 屬性
+            const btPathEl = document.getElementById('path-tpr-bt');
+            const hrPathEl = document.getElementById('path-tpr-hr');
+            const rrPathEl = document.getElementById('path-tpr-rr');
+            const painPathEl = document.getElementById('path-tpr-pain');
+            const btHitEl = document.getElementById('path-tpr-bt-hit');
+            const hrHitEl = document.getElementById('path-tpr-hr-hit');
+            const rrHitEl = document.getElementById('path-tpr-rr-hit');
+            const painHitEl = document.getElementById('path-tpr-pain-hit');
+
+            const btPath = buildSVGPath(btCoords);
+            const hrPath = buildSVGPath(hrCoords);
+            const rrPath = buildSVGPath(rrCoords);
+            const painPath = buildSVGPath(painCoords);
+
+            btPathEl.setAttribute('d', btPath);
+            hrPathEl.setAttribute('d', hrPath);
+            rrPathEl.setAttribute('d', rrPath);
+            painPathEl.setAttribute('d', painPath);
+            btHitEl.setAttribute('d', btPath);
+            hrHitEl.setAttribute('d', hrPath);
+            rrHitEl.setAttribute('d', rrPath);
+            painHitEl.setAttribute('d', painPath);
+
+            // 4. 線條不透明度控制 (動態高亮單一指標)
+            if (currentTPRMetric === 'all') {
+                btPathEl.style.opacity = "1";
+                hrPathEl.style.opacity = "1";
+                rrPathEl.style.opacity = "1";
+                painPathEl.style.opacity = "1";
+                btPathEl.setAttribute('stroke-width', '2.5');
+                hrPathEl.setAttribute('stroke-width', '2');
+                rrPathEl.setAttribute('stroke-width', '1.8');
+                painPathEl.setAttribute('stroke-width', '1.5');
+            } else {
+                btPathEl.style.opacity = currentTPRMetric === 'bt' ? "1" : "0.12";
+                hrPathEl.style.opacity = currentTPRMetric === 'hr' ? "1" : "0.12";
+                rrPathEl.style.opacity = currentTPRMetric === 'rr' ? "1" : "0.12";
+                painPathEl.style.opacity = currentTPRMetric === 'pain' ? "1" : "0.12";
+                
+                // 加粗當前選取線段
+                if (currentTPRMetric === 'bt') btPathEl.setAttribute('stroke-width', '3.5');
+                if (currentTPRMetric === 'hr') hrPathEl.setAttribute('stroke-width', '3.5');
+                if (currentTPRMetric === 'rr') rrPathEl.setAttribute('stroke-width', '3.2');
+                if (currentTPRMetric === 'pain') painPathEl.setAttribute('stroke-width', '3');
+            }
+
+            // 更新卡片頭部資訊
+            document.getElementById('tpr-range-text').innerText = `目前顯示：${zoomLabelMap[level]}時序`;
+            document.getElementById('tpr-range-badge').innerText = zoomLabelMap[level];
+
+            // 5. 動態重繪左側 Y 軸刻度尺 (關鍵核心功能！)
+            let yLabelHtml = '';
+            if (currentTPRMetric === 'all') {
+                // 疊加模式：顯示綜合標籤提示
+                yLabelHtml += `
+                    <text x="25" y="24" font-size="6.5" fill="#ef4444" font-weight="bold" text-anchor="end">39°C</text>
+                    <text x="25" y="68" font-size="6.5" fill="#f59e0b" font-weight="bold" text-anchor="end">疼痛(7)</text>
+                    <text x="25" y="113" font-size="6.5" fill="#3b82f6" font-weight="bold" text-anchor="end">70次</text>
+                `;
+            } else if (currentTPRMetric === 'bt') {
+                // 體溫專屬刻度
+                yLabelHtml += `
+                    <text x="25" y="24" font-size="7" fill="#ef4444" font-weight="bold" text-anchor="end">39.5°C</text>
+                    <text x="25" y="54" font-size="7" fill="#ef4444" text-anchor="end">38.5°C</text>
+                    <text x="25" y="84" font-size="7" fill="#ef4444" text-anchor="end">37.5°C</text>
+                    <text x="25" y="114" font-size="7" fill="#ef4444" text-anchor="end">36.5°C</text>
+                    <text x="25" y="144" font-size="7" fill="#ef4444" text-anchor="end">35.5°C</text>
+                `;
+            } else if (currentTPRMetric === 'hr') {
+                // 心跳專屬刻度
+                yLabelHtml += `
+                    <text x="25" y="24" font-size="7" fill="#3b82f6" font-weight="bold" text-anchor="end">140 bpm</text>
+                    <text x="25" y="54" font-size="7" fill="#3b82f6" text-anchor="end">120 bpm</text>
+                    <text x="25" y="84" font-size="7" fill="#3b82f6" text-anchor="end">100 bpm</text>
+                    <text x="25" y="114" font-size="7" fill="#3b82f6" text-anchor="end">80 bpm</text>
+                    <text x="25" y="144" font-size="7" fill="#3b82f6" text-anchor="end">60 bpm</text>
+                `;
+            } else if (currentTPRMetric === 'rr') {
+                yLabelHtml += `
+                    <text x="25" y="24" font-size="7" fill="#10b981" font-weight="bold" text-anchor="end">28 /min</text>
+                    <text x="25" y="54" font-size="7" fill="#10b981" text-anchor="end">24 /min</text>
+                    <text x="25" y="84" font-size="7" fill="#10b981" text-anchor="end">20 /min</text>
+                    <text x="25" y="114" font-size="7" fill="#10b981" text-anchor="end">16 /min</text>
+                    <text x="25" y="144" font-size="7" fill="#10b981" text-anchor="end">12 /min</text>
+                `;
+            } else if (currentTPRMetric === 'pain') {
+                // 疼痛專屬刻度
+                yLabelHtml += `
+                    <text x="25" y="24" font-size="7" fill="#f59e0b" font-weight="bold" text-anchor="end">10 分</text>
+                    <text x="25" y="54" font-size="7" fill="#f59e0b" text-anchor="end">8 分</text>
+                    <text x="25" y="84" font-size="7" fill="#f59e0b" text-anchor="end">6 分</text>
+                    <text x="25" y="114" font-size="7" fill="#f59e0b" text-anchor="end">4 分</text>
+                    <text x="25" y="144" font-size="7" fill="#f59e0b" text-anchor="end">0 分</text>
+                `;
+            }
+            document.getElementById('tpr-y-labels-group').innerHTML = yLabelHtml;
+
+            // 6. 動態繪製 X 軸格線
+            let gridHtml = '';
+            dataPoints.forEach((dp, index) => {
+                const x = startX + index * stepX;
+                gridHtml += `<line x1="${x}" y1="20" x2="${x}" y2="150" stroke="#e2e8f0" stroke-width="0.8" stroke-dasharray="2,2" />`;
+            });
+            document.getElementById('tpr-grid-lines').innerHTML = gridHtml;
+
+            // 7. 繪製數據節點與 Hover Tooltip 內容
+            let dotsHtml = '';
+            dataPoints.forEach((dp, index) => {
+                const x = startX + index * stepX;
+                
+                // 根據當前單一高亮狀態呈現節點
+                if (currentTPRMetric === 'all' || currentTPRMetric === 'bt') {
+                    const y = mapValueToY(dp.bt, btRange.min, btRange.max);
+                    dotsHtml += `<circle cx="${x}" cy="${y}" r="3.5" fill="#f43f5e" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                        onmouseover="showTooltip(event, '體溫 (BT)', '時間: ${dp.time}<br>數值: <b>${dp.bt} °C</b><br>狀態: ${dp.bt >= 38.0 ? "⚠️ 發燒" : "正常"}')"
+                        onmousemove="moveTooltip(event)"
+                        onmouseout="hideTooltip(event)" />`;
+                }
+                if (currentTPRMetric === 'all' || currentTPRMetric === 'hr') {
+                    const y = mapValueToY(dp.hr, hrRange.min, hrRange.max);
+                    dotsHtml += `<circle cx="${x}" cy="${y}" r="3.5" fill="#3b82f6" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                        onmouseover="showTooltip(event, '心跳 (HR)', '時間: ${dp.time}<br>數值: <b>${dp.hr} bpm</b><br>狀態: ${dp.hr >= 100 ? "⚠️ 過速" : "正常"}')"
+                        onmousemove="moveTooltip(event)"
+                        onmouseout="hideTooltip(event)" />`;
+                }
+                if (currentTPRMetric === 'all' || currentTPRMetric === 'rr') {
+                    const y = mapValueToY(dp.rr, rrRange.min, rrRange.max);
+                    dotsHtml += `<circle cx="${x}" cy="${y}" r="3.5" fill="#10b981" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                        onmouseover="showTooltip(event, 'Respiration (RR)', 'Time: ${dp.time}<br>Value: <b>${dp.rr} /min</b><br>Status: ${dp.rr >= 22 ? 'Fast' : 'Stable'}')"
+                        onmousemove="moveTooltip(event)"
+                        onmouseout="hideTooltip(event)" />`;
+                }
+                if (currentTPRMetric === 'all' || currentTPRMetric === 'pain') {
+                    const y = mapValueToY(dp.pain, painRange.min, painRange.max);
+                    dotsHtml += `<circle cx="${x}" cy="${y}" r="3.5" fill="#f59e0b" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                        onmouseover="showTooltip(event, '疼痛強度 (Pain)', '時間: ${dp.time}<br>疼痛VAS評分: <b>${dp.pain} /10 分</b>')"
+                        onmousemove="moveTooltip(event)"
+                        onmouseout="hideTooltip(event)" />`;
+                }
+            });
+            document.getElementById('tpr-dots-group').innerHTML = dotsHtml;
+
+            // 8. 繪製 X 軸時間標籤
+            let labelsHtml = '';
+            // 避免小螢幕上標籤重疊，間隔顯示標籤
+            const labelInterval = length > 6 ? 2 : 1;
+            dataPoints.forEach((dp, index) => {
+                if (index % labelInterval === 0 || index === length - 1) {
+                    const x = startX + index * stepX;
+                    labelsHtml += `<text x="${x}" y="165" font-size="7" fill="#64748b" text-anchor="middle">${dp.time}</text>`;
+                }
+            });
+            document.getElementById('tpr-labels-group').innerHTML = labelsHtml;
+        }
+
+        function renderSugarChart(level = 'today') {
+            const source = chartDataStore.sugar[level];
+            
+            document.getElementById('path-sugar').setAttribute('d', source.path);
+            document.getElementById('sugar-range-text').innerText = source.rangeText;
+            document.getElementById('sugar-range-badge').innerText = source.badge;
+
+            // 數據點 (綁定滑鼠懸停事件)
+            let dotsHtml = '';
+            source.points.forEach(pt => {
+                dotsHtml += `<circle cx="${pt.cx}" cy="${pt.cy}" r="3.5" fill="#6366f1" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                    onmouseover="showTooltip(event, '血糖監控數值', '${pt.val}')"
+                    onmousemove="moveTooltip(event)"
+                    onmouseout="hideTooltip(event)" />`;
+            });
+            document.getElementById('sugar-dots-group').innerHTML = dotsHtml;
+
+            // 橫軸文字標籤
+            let labelsHtml = '';
+            const labelXGroup = level === 'today' ? [40, 150, 260] : (level === '3days' ? [40, 150, 260] : [40, 130, 260]);
+            const labelTextGroup = level === 'today' ? ["07:00", "09:30", "11:30"] : (level === '3days' ? ["6/15", "6/16", "今日"] : ["6/11", "6/15", "今日"]);
+            
+            labelTextGroup.forEach((text, idx) => {
+                labelsHtml += `<text x="${labelXGroup[idx]}" y="120" font-size="7" fill="#64748b" text-anchor="middle">${text}</text>`;
+            });
+            document.getElementById('sugar-labels-group').innerHTML = labelsHtml;
+
+            // 底部胰島素注射時間軸
+            let timelineHtml = '';
+            source.timeline.forEach(item => {
+                timelineHtml += `
+                    <div>
+                        <p class="font-bold text-slate-400">${item.title}</p>
+                        <span class="bg-blue-50 text-blue-700 px-1 py-0.2 rounded block mt-0.5 font-bold">${item.val}</span>
+                    </div>
+                `;
+            });
+            document.getElementById('sugar-timeline-grid').innerHTML = timelineHtml;
+        }
+
+        function renderIOChart(level = 'today') {
+            renderIOChartCommon(level);
+        }
+
+        function renderLabChartLegacy(level = 'today') {
+            const source = chartDataStore.lab[level];
+            
+            document.getElementById('path-lab-wbc').setAttribute('d', source.wbc);
+            document.getElementById('path-lab-crp').setAttribute('d', source.crp);
+            document.getElementById('lab-range-text').innerText = source.rangeText;
+            document.getElementById('lab-range-badge').innerText = source.badge;
+
+            // 數據點 (綁定滑鼠懸停事件)
+            let dotsHtml = '';
+            source.points.forEach(pt => {
+                dotsHtml += `<circle cx="${pt.cx}" cy="${pt.cy}" r="3.5" fill="#10b981" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                    onmouseover="showTooltip(event, '發炎指標數據', '${pt.val}')"
+                    onmousemove="moveTooltip(event)"
+                    onmouseout="hideTooltip(event)" />`;
+            });
+            document.getElementById('lab-dots-group').innerHTML = dotsHtml;
+
+            // 標籤
+            let labelsHtml = '';
+            source.labels.forEach(lbl => {
+                labelsHtml += `<text x="${lbl.x}" y="115" font-size="7" fill="#64748b" text-anchor="middle">${lbl.text}</text>`;
+            });
+            document.getElementById('lab-labels-group').innerHTML = labelsHtml;
+        }
+
+        function renderLabChart(level = 'today') {
+            const source = labSeriesStore[level];
+            const points = source.points;
+            const startX = 40;
+            const endX = 260;
+            const stepX = (endX - startX) / (points.length - 1 || 1);
+
+            const withPadding = (values) => {
+                const min = Math.min(...values);
+                const max = Math.max(...values);
+                const span = Math.max(max - min, 1);
+                const padding = span * 0.15;
+                return { min: Math.max(0, min - padding), max: max + padding };
+            };
+            const mapY = (value, min, max, top, bottom) => {
+                const ratio = (value - min) / (max - min || 1);
+                return bottom - ratio * (bottom - top);
+            };
+            const buildPath = (coords) => coords.map((pt, index) => `${index === 0 ? 'M' : 'L'} ${pt.x},${pt.y}`).join(' ');
+
+            const wbcRange = withPadding(points.map(pt => pt.wbc));
+            const crpRange = withPadding(points.map(pt => pt.crp));
+            const wbcCoords = points.map((pt, index) => ({ x: startX + index * stepX, y: mapY(pt.wbc, wbcRange.min, wbcRange.max, 18, 58) }));
+            const crpCoords = points.map((pt, index) => ({ x: startX + index * stepX, y: mapY(pt.crp, crpRange.min, crpRange.max, 78, 118) }));
+
+            document.getElementById('path-lab-wbc').setAttribute('d', buildPath(wbcCoords));
+            document.getElementById('path-lab-crp').setAttribute('d', buildPath(crpCoords));
+            document.getElementById('lab-range-text').innerText = source.rangeText;
+            document.getElementById('lab-range-badge').innerText = source.badge;
+
+            const wbcTicks = [wbcRange.max, (wbcRange.max + wbcRange.min) / 2, wbcRange.min];
+            const crpTicks = [crpRange.max, (crpRange.max + crpRange.min) / 2, crpRange.min];
+
+            document.getElementById('lab-wbc-y-labels').innerHTML = wbcTicks.map((value) => `
+                <text x="26" y="${mapY(value, wbcRange.min, wbcRange.max, 18, 58) + 2}" font-size="6.5" fill="#059669" text-anchor="end">${Math.round(value).toLocaleString()}</text>
+            `).join('');
+            document.getElementById('lab-crp-y-labels').innerHTML = crpTicks.map((value) => `
+                <text x="26" y="${mapY(value, crpRange.min, crpRange.max, 78, 118) + 2}" font-size="6.5" fill="#7c3aed" text-anchor="end">${value.toFixed(1)}</text>
+            `).join('');
+
+            let gridHtml = '';
+            points.forEach((pt, index) => {
+                const x = startX + index * stepX;
+                gridHtml += `<line x1="${x}" y1="18" x2="${x}" y2="118" stroke="#e2e8f0" stroke-width="0.7" stroke-dasharray="2,2" />`;
+            });
+            document.getElementById('lab-grid-lines').innerHTML = gridHtml;
+
+            let wbcDotsHtml = '';
+            let crpDotsHtml = '';
+            points.forEach((pt, index) => {
+                const x = startX + index * stepX;
+                const wbcY = mapY(pt.wbc, wbcRange.min, wbcRange.max, 18, 58);
+                const crpY = mapY(pt.crp, crpRange.min, crpRange.max, 78, 118);
+                wbcDotsHtml += `<circle cx="${x}" cy="${wbcY}" r="3.5" fill="#10b981" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                    onmouseover="showTooltip(event, 'WBC 趨勢', '${pt.tooltip}')"
+                    onmousemove="moveTooltip(event)"
+                    onmouseout="hideTooltip(event)" />`;
+                crpDotsHtml += `<circle cx="${x}" cy="${crpY}" r="3.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="1.2" class="chart-point"
+                    onmouseover="showTooltip(event, 'CRP 趨勢', '${pt.tooltip}')"
+                    onmousemove="moveTooltip(event)"
+                    onmouseout="hideTooltip(event)" />`;
+            });
+            document.getElementById('lab-wbc-dots-group').innerHTML = wbcDotsHtml;
+            document.getElementById('lab-crp-dots-group').innerHTML = crpDotsHtml;
+
+            let labelsHtml = '';
+            points.forEach((pt, index) => {
+                const x = startX + index * stepX;
+                labelsHtml += `<text x="${x}" y="142" font-size="7" fill="#64748b" text-anchor="middle">${pt.label}</text>`;
+            });
+            document.getElementById('lab-labels-group').innerHTML = labelsHtml;
+        }
+
+        // ================= 觸發對應渲染 =================
+        function triggerRender(chartId, level) {
+            if (chartId === 'tpr') renderTPRChart(level);
+            if (chartId === 'sugar') renderSugarChart(level);
+            if (chartId === 'io') renderIOChart(level);
+            if (chartId === 'lab') renderLabChart(level);
+        }
+
+        // 初始化所有圖表
+        function initAllCharts() {
+            renderTPRChart('today');
+            renderSugarChart('today');
+            renderIOChart('today');
+            renderLabChart('today');
+            
+            // 更新各圖表直切 Tab UI 的初始狀態
+            updateTabUI('tpr', 'today');
+            updateTabUI('sugar', 'today');
+            updateTabUI('io', 'today');
+            updateTabUI('lab', 'today');
+        }
+
+        // ================= 右側欄精確定位功能 (Sticky Dock 連動) =================
+        function scrollToMetric(elementId) {
+            const rightContainer = document.getElementById('right-scroll-container');
+            const targetElement = document.getElementById(elementId);
+            if (rightContainer && targetElement) {
+                const relativeTop = targetElement.offsetTop - rightContainer.offsetTop;
+                rightContainer.scrollTo({
+                    top: relativeTop,
+                    behavior: 'smooth'
+                });
+                
+                // 動態高亮閃爍提醒
+                targetElement.classList.add('ring-2', 'ring-blue-500/20', 'scale-[1.005]');
+                setTimeout(() => {
+                    targetElement.classList.remove('ring-2', 'ring-blue-500/20', 'scale-[1.005]');
+                }, 2000);
+            }
+        }
+
+        // 滾動偵測，動態高亮導覽列上對應的按鈕
+        function updateDockHighlight() {
+            const rightContainer = document.getElementById('right-scroll-container');
+            const metrics = ['tpr', 'sugar', 'io', 'lab', 'wound', 'tables', 'consult'];
+            let activeId = 'tpr';
+            
+            for (let id of metrics) {
+                const el = document.getElementById(`chart-card-${id}`);
+                if (el) {
+                    const elTop = el.offsetTop;
+                    if (elTop - rightContainer.offsetTop <= rightContainer.scrollTop + 60) {
+                        activeId = id;
+                    }
+                }
+            }
+            
+            metrics.forEach(id => {
+                const btn = document.getElementById(`dock-btn-${id}`);
+                if (btn) {
+                    if (id === activeId) {
+                        btn.className = "px-2.5 py-1.5 rounded-lg text-[10px] font-bold bg-white text-blue-700 shadow-sm transition whitespace-nowrap";
+                    } else {
+                        btn.className = "px-2.5 py-1.5 rounded-lg text-[10px] text-slate-600 hover:bg-white transition whitespace-nowrap";
+                    }
+                }
+            });
+        }
+
+        // 左側高亮與右側平滑滾動聯動 (帶特定縮放時序與單一指標高亮)
+        function focusAndExpandChart(chartId, targetLevel = 'full', subMetric = 'all') {
+            // 1. 如果有指定縮放等級，自動觸發重繪並切換 Tab UI
+            if (targetLevel && chartZoomIndices[chartId] !== undefined) {
+                const targetIndex = zoomLevels.indexOf(targetLevel);
+                if (targetIndex !== -1) {
+                    chartZoomIndices[chartId] = targetIndex;
+                    executeZoomAnimation(chartId, targetLevel);
+                }
+            }
+
+            // 2. 如果指定了特定的臨床指標（如 bt 體溫），則進入單一高亮重繪
+            if (chartId === 'tpr' && subMetric) {
+                switchTPRMetric(subMetric);
+            }
+
+            // 3. 平滑定位右欄滾動條
+            scrollToMetric(`chart-card-${chartId}`);
+        }
+
+        // ================= 視角切換模擬 =================
+        function toggleRoleView() {
+            const role = document.getElementById('role-select').value;
+            if (role === 'doctor') {
+                showToast("【醫師交班視角】", "已為您平滑定位發炎監控指標 (WBC/CRP)，並縮放至全程檢驗對照。");
+                focusAndExpandChart('lab', 'full');
+            } else {
+                showToast("【護理師交班視角】", "已為您定位尾骶骨壓瘡影像時序與 Foley 尿管更換警示。");
+                focusAndExpandChart('wound', '');
+            }
+        }
+
+        // 彈出提示
+        function showToast(title, desc) {
+            let toast = document.getElementById('glow-notification');
+            document.getElementById('toast-title').innerText = title;
+            document.getElementById('toast-desc').innerText = desc;
+            toast.classList.replace('translate-y-24', 'translate-y-0');
+            toast.classList.replace('opacity-0', 'opacity-100');
+            
+            setTimeout(() => {
+                toast.classList.replace('translate-y-0', 'translate-y-24');
+                toast.classList.replace('opacity-100', 'opacity-0');
+            }, 3500);
+        }
+
+        function highlightAllergy() {
+            showToast("Penicillin 過敏警示", "患者有 Penicillin 皮疹過敏史。目前醫囑追加之 Kefzol (Cefazolin) 已通過藥劑科安全審核，請於第一劑滴注時密切觀察 15 分鐘。");
+        }
+
+        const consultTranslationStore = {
+            'consult-infect': `
+                <div class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                    <div class="flex items-center gap-1.5 mb-1">
+                        <i data-lucide="languages" class="w-3.5 h-3.5 text-blue-600"></i>
+                        <p class="text-[10px] font-semibold text-blue-800">繁體中文翻譯結果</p>
+                    </div>
+                    <div class="space-y-1.5 leading-relaxed text-slate-700">
+                        <p><b>會診日期：</b>2026/06/18 09:20</p>
+                        <p><b>會診科別：</b>感染科</p>
+                        <p><b>會診原因：</b>結腸切除術後持續發燒。</p>
+                        <p><b>處置計畫：</b>安排兩套血液培養，並持續使用 Cefazolin 靜脈注射，每 8 小時一次。</p>
+                        <p><b>備註翻譯：</b>病人意識清楚，夜間體溫最高 38.2°C，傷口沒有引流。建議持續觀察體溫趨勢，並於明日上午追蹤培養結果。</p>
+                    </div>
+                </div>
+            `,
+            'consult-cardio': null
+        };
+
+        function initializeConsultTranslationBlocks() {
+            document.querySelectorAll('.consult-translate-btn').forEach((button) => {
+                const originalBlock = document.getElementById(button.dataset.originalTarget);
+                if (!originalBlock) return;
+
+                const originalText = originalBlock.innerText || '';
+                const hasEnglish = /[A-Za-z]/.test(originalText) || originalBlock.dataset.hasEnglish === 'true';
+
+                if (!hasEnglish) {
+                    button.classList.add('hidden');
+                    button.disabled = true;
+                } else {
+                    button.classList.remove('hidden');
+                    button.disabled = false;
+                }
+            });
+        }
+
+        function translateConsult(button) {
+            const consultId = button.dataset.consultId;
+            const translationTarget = document.getElementById(button.dataset.translationTarget);
+            const errorTarget = document.getElementById(button.dataset.errorTarget);
+
+            if (!translationTarget || !errorTarget) return;
+
+            errorTarget.textContent = '';
+            errorTarget.classList.add('hidden');
+
+            if (button.dataset.forceError === 'true') {
+                errorTarget.textContent = '翻譯失敗，請稍後再試；原始會診內容仍完整保留。';
+                errorTarget.classList.remove('hidden');
+                showToast('會診翻譯失敗', '原始英文內容仍可查看，AI 交班摘要不受影響。');
+                return;
+            }
+
+            if (translationTarget.dataset.rendered === 'true') {
+                showToast('已顯示翻譯結果', '繁體中文已附加於原始英文上方，可直接比對。');
+                return;
+            }
+
+            const translatedHtml = consultTranslationStore[consultId];
+            if (!translatedHtml) {
+                errorTarget.textContent = '翻譯失敗，請稍後再試；原始會診內容仍完整保留。';
+                errorTarget.classList.remove('hidden');
+                return;
+            }
+
+            translationTarget.innerHTML = translatedHtml;
+            translationTarget.dataset.rendered = 'true';
+            button.disabled = true;
+            button.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5"></i> 已翻譯';
+            lucide.createIcons();
+            showToast('會診英翻中完成', '翻譯結果已顯示在原始資料上方，英文原文完整保留。');
+        }
+
+        // 頁面加載完成後初始化
+        window.onload = function() {
+            initAllCharts();
+            initializeConsultTranslationBlocks();
+            setupChartZoomButtons();
+            bindChartZoomInteractions();
+        }
+    </script>
+</body>
+</html>
