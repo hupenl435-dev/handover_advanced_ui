@@ -167,90 +167,71 @@
         <section class="flex-shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full">
             <div class="flex flex-col">
                 <!-- 上方：病人基本資料 (API 1) -->
-                <div class="p-5 bg-gradient-to-br from-slate-950 to-slate-850 text-white flex flex-col gap-4 relative">
-                    <div class="absolute top-4 right-4 bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs px-2.5 py-1 rounded-md font-semibold">
-                        3B02-05 床 (一般外科)
-                    </div>
-                    <div class="flex items-center space-x-4 pr-28">
-                        <div class="w-14 h-14 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl font-bold text-slate-100 shadow-inner">
-                            王
-                        </div>
-                        <div class="flex-1 space-y-2">
-                            <div class="flex items-center flex-wrap gap-x-2 gap-y-1">
-                                <h2 class="text-xl font-bold tracking-tight">王*明</h2>
-                                <span class="text-xs text-slate-400">男性, 68歲</span>
+                <div class="bg-gradient-to-br from-white via-slate-50 to-blue-50/70 text-slate-800">
+                    <div class="grid gap-3 p-4 lg:grid-cols-[35fr_65fr] lg:items-stretch">
+                        <div class="grid min-w-0 grid-cols-[88px_minmax(0,1fr)] gap-3">
+                            <div class="flex h-[76px] w-[88px] flex-shrink-0 flex-col items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-900 shadow-sm">
+                                <span class="text-[9px] font-bold uppercase tracking-wider text-blue-500">床號</span>
+                                <span class="mt-1 text-lg font-extrabold leading-none">3B02-05</span>
+                                <span class="mt-1 text-[10px] font-semibold text-blue-600">一般外科</span>
                             </div>
-                            <div class="flex flex-wrap gap-2 text-[11px]">
-                                <span class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/45 px-2.5 py-1 text-slate-300">
-                                    <i data-lucide="hash" class="w-3 h-3 text-slate-450"></i> 病歷號: 1024***8
-                                </span>
-                                <span class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/45 px-2.5 py-1 text-slate-300">
-                                    <i data-lucide="credit-card" class="w-3 h-3 text-slate-450"></i> 身分證: A12******9
-                                </span>
-                                <span class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/45 px-2.5 py-1 text-slate-300">
-                                    <i data-lucide="user" class="w-3 h-3 text-slate-455"></i> 主治醫師: <b>林大華 醫師</b>
-                                </span>
-                                <span class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/45 px-2.5 py-1 text-slate-300">
-                                    <i data-lucide="calendar-days" class="w-3 h-3 text-slate-450"></i> 入院: 2026-06-09
-                                </span>
-                                <span class="inline-flex items-center gap-1 rounded-lg border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 font-semibold text-blue-300">
-                                    <i data-lucide="calendar" class="w-3 h-3"></i> 已住院 8 天
-                                </span>
+                            <div class="min-w-0 flex-1 space-y-2">
+                                <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                    <h2 class="text-xl font-bold tracking-tight text-slate-950">王*明</h2>
+                                    <span class="text-xs text-slate-500">男性, 68歲</span>
+                                    <span class="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700">住院第 8 天</span>
+                                </div>
+                                <div class="grid gap-1.5 text-[11px] sm:grid-cols-2">
+                                    <div class="flex min-h-8 items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-slate-700 shadow-sm">
+                                        <span class="flex items-center gap-1 text-[10px] font-bold text-slate-500"><i data-lucide="hash" class="h-3 w-3 text-slate-400"></i>病歷號</span>
+                                        <span class="font-semibold text-slate-800">1024***8</span>
+                                    </div>
+                                    <div class="flex min-h-8 items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-slate-700 shadow-sm">
+                                        <span class="flex items-center gap-1 text-[10px] font-bold text-slate-500"><i data-lucide="credit-card" class="h-3 w-3 text-slate-400"></i>身分證</span>
+                                        <span class="font-semibold text-slate-800">A12******9</span>
+                                    </div>
+                                    <div class="flex min-h-8 items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-slate-700 shadow-sm">
+                                        <span class="flex items-center gap-1 text-[10px] font-bold text-slate-500"><i data-lucide="user" class="h-3 w-3 text-slate-400"></i>主治</span>
+                                        <span class="font-semibold text-slate-800">林大華</span>
+                                    </div>
+                                    <div class="flex min-h-8 items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-slate-700 shadow-sm">
+                                        <span class="flex items-center gap-1 text-[10px] font-bold text-slate-500"><i data-lucide="calendar-days" class="h-3 w-3 text-slate-400"></i>入院</span>
+                                        <span class="font-semibold text-slate-800">2026-06-09</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                <!-- 下方：高警示臨床標籤 (API 2, 4, 6, 24, 26) -->
-                <div class="p-4 lg:p-5 flex flex-col gap-3 border-t border-slate-200">
-                    <div class="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-3">
-                        <div class="xl:w-32 xl:flex-shrink-0">
-                            <h3 class="text-[11px] font-bold text-slate-450 uppercase tracking-wider">高警示臨床標籤 (API Tags)</h3>
-                        </div>
-                        <div class="flex flex-wrap gap-2">
-                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-50 text-orange-800 border border-orange-200">
-                                <span class="w-2 h-2 rounded-full bg-orange-500"></span>
-                                傳染病: VRE (+)
-                            </span>
-                            
-                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-50 text-purple-800 border border-purple-200 cursor-help transition hover:bg-purple-100/50" onclick="highlightAllergy()">
-                                <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-purple-500"></i>
-                                過敏: Penicillin (皮疹)
-                            </span>
-
-                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
-                                <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-amber-500"></i>
-                                跌倒高風險 (Morse: 65)
-                            </span>
-
-                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-850 border border-red-200 animate-pulse-border">
-                                <i data-lucide="shield-off" class="w-3.5 h-3.5 text-red-600"></i>
-                                重大註記: 家屬曾有言語衝突紀錄
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- API 26: 針扎高危險群 -->
-                    <div class="pt-3 border-t border-slate-100 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
-                        <div class="flex items-center space-x-2.5 min-w-0">
-                            <div class="p-1.5 bg-rose-100 text-rose-700 rounded-lg">
-                                <i data-lucide="droplet" class="w-4 h-4"></i>
+                        <div class="rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+                            <div class="mb-2 flex items-center justify-between gap-2">
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-wider text-slate-500">臨床警示</p>
+                                    <p class="text-sm font-extrabold text-slate-900">5 項需交班注意</p>
+                                </div>
+                                <span class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 shadow-sm">一般外科</span>
                             </div>
-                            <div class="min-w-0">
-                                <h4 class="text-xs font-bold text-slate-900">針扎高危險資訊安全區 (API 26)</h4>
-                                <p class="text-[10px] text-slate-550">涉及病毒性傳染高風險註記，限直接臨床照護醫護人員開啟</p>
+                            <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+                                <span class="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 px-2.5 py-1.5 font-semibold text-orange-800">
+                                    <span class="h-1.5 w-1.5 rounded-full bg-orange-400"></span>
+                                    VRE (+)
+                                </span>
+                                <button type="button" onclick="highlightAllergy()" class="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-left font-semibold text-purple-800 transition hover:bg-purple-100/70">
+                                    <i data-lucide="shield-alert" class="h-3.5 w-3.5"></i>
+                                    Penicillin
+                                </button>
+                                <span class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 font-semibold text-amber-800">
+                                    <i data-lucide="alert-triangle" class="h-3.5 w-3.5"></i>
+                                    Morse 65
+                                </span>
+                                <span class="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 font-semibold text-rose-800">
+                                    <i data-lucide="droplet" class="h-3.5 w-3.5"></i>
+                                    HBV (+)
+                                </span>
+                                <span class="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 font-semibold text-red-800">
+                                    <i data-lucide="shield-off" class="h-3.5 w-3.5"></i>
+                                    家屬曾有言語衝突紀錄
+                                </span>
                             </div>
-                        </div>
-                        
-                        <div class="flex flex-wrap items-center gap-3">
-                            <div id="needle-privacy-box" class="hidden px-2.5 py-1.5 bg-rose-50 border border-rose-100 rounded-lg text-[11px] text-rose-800 flex items-center gap-1.5">
-                                <i data-lucide="alert-circle" class="w-3.5 h-3.5 text-rose-600 flex-shrink-0"></i>
-                                <span><b>HBV (+) 帶原者</b>，侵入性治療請加戴雙手套。</span>
-                            </div>
-                            <button id="needle-reveal-btn" onclick="toggleNeedlePrivacy()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-3 py-1.5 rounded-lg transition flex items-center gap-1">
-                                <i data-lucide="eye" class="w-3.5 h-3.5"></i>
-                                <span>安全解鎖</span>
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -265,7 +246,56 @@
                 <div class="flex-1 overflow-y-auto pr-2 space-y-4">
                     
                     <!-- 敘述性文字 AI 摘要區 -->
-                    <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+                    <!-- 敘述性文字 AI 智慧摘要：四幕敘事與 3 日版本保存示意 -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4 overflow-hidden">
+                        <div class="flex flex-col gap-3 border-b border-slate-100 pb-4 xl:flex-row xl:items-center xl:justify-between">
+                            <div class="flex items-start gap-3">
+                                <div class="p-1.5 bg-violet-100 text-violet-700 rounded-lg">
+                                    <i data-lucide="sparkles" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <h2 class="text-base font-bold text-slate-900">敘述性文字 AI 智慧摘要</h2>
+                                        <span class="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700 ring-1 ring-violet-100">
+                                            <i data-lucide="archive" class="w-3 h-3"></i>3 日保存
+                                        </span>
+                                    </div>
+                                    <p class="mt-1 text-[11px] text-slate-500">以四幕交班格式呈現，可從摘要文字直接定位右側結構化資料對照。</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                                <button type="button" data-narrative-day="day-2" onclick="switchNarrativeSummary('day-2')" class="narrative-day-btn inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-slate-500 transition hover:bg-white hover:text-slate-900" title="前日 AI 摘要">
+                                    <i data-lucide="history" class="w-3.5 h-3.5"></i>6/16
+                                </button>
+                                <button type="button" data-narrative-day="day-1" onclick="switchNarrativeSummary('day-1')" class="narrative-day-btn inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-slate-500 transition hover:bg-white hover:text-slate-900" title="昨日 AI 摘要">
+                                    <i data-lucide="clock-3" class="w-3.5 h-3.5"></i>6/17
+                                </button>
+                                <button type="button" data-narrative-day="today" onclick="switchNarrativeSummary('today')" class="narrative-day-btn inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-bold text-blue-700 shadow-sm ring-1 ring-blue-100" title="今日 AI 摘要">
+                                    <i data-lucide="calendar-check" class="w-3.5 h-3.5"></i>今日
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50/70 via-white to-sky-50/60 p-4">
+                            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <p id="narrative-summary-date" class="text-[11px] font-bold text-violet-700">2026/06/18 11:50 生成</p>
+                                    <p class="text-[10px] text-slate-500">ACT 01~04 標題格式固定，供後端 _parse_acts 切割。</p>
+                                </div>
+                                <span id="narrative-summary-status" class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-100">
+                                    <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>已保存
+                                </span>
+                            </div>
+                            <div id="narrative-summary-body" class="space-y-3 text-xs leading-relaxed text-slate-700"></div>
+                        </div>
+
+                        <div class="flex items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-2 text-[10px] text-slate-500">
+                            <i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5 text-violet-500"></i>
+                            <span>摘要中的彩色重點可直接定位右側結構化資料，保留交班閱讀節奏。</span>
+                        </div>
+                    </div>
+
+                    <div class="hidden bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
                         <div class="flex items-center space-x-2 border-b border-slate-100 pb-3">
                             <div class="p-1.5 bg-violet-100 text-violet-700 rounded-lg">
                                 <i data-lucide="sparkles" class="w-5 h-5"></i>
@@ -287,7 +317,7 @@
                                 </span>
                                 <div class="leading-relaxed text-slate-655 space-y-1.5 pl-6">
                                     <p><b>入院診斷：</b> Colon Cancer, Stage III (乙狀結腸癌第三期)</p>
-                                    <p><b>住院經過：</b> 於 6/11 進行 <b>乙狀結腸部分切除術 (API 5)</b>。術後恢復平穩。今日晨間患者出現 <span class="bg-red-100 text-red-900 px-1.5 py-0.5 rounded font-extrabold cursor-pointer border-b-2 border-red-500 hover:bg-red-200 transition" onclick="focusAndExpandChart('tpr', 'week', 'bt')">體溫急劇攀升至 38.2°C (API 8) ⚠️ (點擊查看一週體溫專屬 Y 軸)</span> 伴隨輕微畏寒。目前已完成血液培養，並開立 Kefzol 抗生素治療。</p>
+                                    <p><b>住院經過：</b> 於 6/11 進行 <b>乙狀結腸部分切除術 (API 5)</b>。術後恢復平穩。今日晨間患者出現 <span class="bg-red-100 text-red-900 px-1.5 py-0.5 rounded font-extrabold cursor-pointer border-b-2 border-red-500 hover:bg-red-200 transition" onclick="focusAndExpandChart('tpr', 'week', 'bt')">體溫急劇攀升至 38.2°C ⚠️ </span> 伴隨輕微畏寒。目前已完成血液培養，並開立 Kefzol 抗生素治療。</p>
                                 </div>
                             </div>
 
@@ -298,7 +328,7 @@
                                     健康問題、護理指導 & 皮膚黏膜 (API 21, 22)
                                 </span>
                                 <div class="leading-relaxed text-slate-655 space-y-1.5 pl-6">
-                                    <p><b>健康問題：</b> 急性疼痛（與傷口及拉扯相關，VAS 5分）、潛在性感染。尾骶骨處發現 <span class="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-bold cursor-pointer border-b-2 border-amber-500 hover:bg-amber-200 transition" onclick="focusAndExpandChart('wound', '')">一期壓瘡 2x2 cm ⚠️ (點擊右欄滑至相片紀錄)</span>，已敷貼 Comfeel 減壓敷料，並衛教家屬每 2 小時側翻身防壓迫。</p>
+                                    <p><b>健康問題：</b> 急性疼痛（與傷口及拉扯相關，VAS 5分）、潛在性感染。尾骶骨處發現 <span class="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-bold cursor-pointer border-b-2 border-amber-500 hover:bg-amber-200 transition" onclick="focusAndExpandChart('wound', '')">一期壓瘡 2x2 cm</span>，已敷貼 Comfeel 減壓敷料，並衛教家屬每 2 小時側翻身防壓迫。</p>
                                 </div>
                             </div>
 
@@ -313,8 +343,8 @@
                                         <i data-lucide="brain" class="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"></i>
                                         <p class="text-xs text-blue-950 font-medium"><b>AI 聯合臨床評估：</b>今日飯前血糖大幅攀升，與 WBC 發炎指標上升高度重合。考慮為急性感染所誘發之應激性高血糖。</p>
                                     </div>
-                                    <p><b>血糖控制 (DMsheet)：</b> 早上 07:00 血糖值為 <span class="bg-red-100 text-red-900 px-1.5 py-0.5 rounded font-bold cursor-pointer border-b-2 border-red-500 hover:bg-red-200 transition" onclick="focusAndExpandChart('sugar', '3days')">280 mg/dL (API 11) ⚠️ (點擊查看3天內血糖趨勢)</span>，已依 Sliding Scale 皮下注射速效 RI 8U。</p>
-                                    <p><b>檢驗報告：</b> 最新白血球數 <span class="bg-red-100 text-red-900 px-1.5 py-0.5 rounded font-bold cursor-pointer border-b-2 border-red-500 hover:bg-red-200 transition" onclick="focusAndExpandChart('lab', 'full')">WBC: 14,200/uL (API 12) ⚠️ (點擊查看全程檢驗對比)</span>，CRP 急升至 4.2 mg/dL。</p>
+                                    <p><b>血糖控制 (DMsheet)：</b> 早上 07:00 血糖值為 <span class="bg-red-100 text-red-900 px-1.5 py-0.5 rounded font-bold cursor-pointer border-b-2 border-red-500 hover:bg-red-200 transition" onclick="focusAndExpandChart('sugar', '3days')">280 mg/dL ⚠️ </span>，已依 Sliding Scale 皮下注射速效 RI 8U。</p>
+                                    <p><b>檢驗報告：</b> 最新白血球數 <span class="bg-red-100 text-red-900 px-1.5 py-0.5 rounded font-bold cursor-pointer border-b-2 border-red-500 hover:bg-red-200 transition" onclick="focusAndExpandChart('lab', 'full')">WBC: 14,200/uL ⚠️ (點擊查看全程檢驗對比)</span>，CRP 急升至 4.2 mg/dL。</p>
                                 </div>
                             </div>
 
@@ -1711,7 +1741,6 @@ let btRange, hrRange, rrRange, painRange;
             lucide.createIcons();
         }
 
-        // 模擬針扎高危險註記隱私切換 (API 26)
         function getChartZoomSource(card) {
             if (!card) return null;
             return card.querySelector('.chart-zoom-source')
@@ -2264,26 +2293,6 @@ let btRange, hrRange, rrRange, painRange;
             requestAnimationFrame(() => {
                 fitChartZoomToViewport();
             });
-        }
-
-        let isNeedleVisible = false;
-        function toggleNeedlePrivacy() {
-            const box = document.getElementById('needle-privacy-box');
-            const btn = document.getElementById('needle-reveal-btn');
-            
-            isNeedleVisible = !isNeedleVisible;
-            if (isNeedleVisible) {
-                box.classList.remove('hidden');
-                btn.innerHTML = `<i data-lucide="eye-off" class="w-3.5 h-3.5"></i> <span>隱藏保護</span>`;
-                btn.classList.replace('bg-slate-100', 'bg-rose-100');
-                btn.classList.replace('text-slate-700', 'text-rose-700');
-            } else {
-                box.classList.add('hidden');
-                btn.innerHTML = `<i data-lucide="eye" class="w-3.5 h-3.5"></i> <span>安全解鎖</span>`;
-                btn.classList.replace('bg-rose-100', 'bg-slate-100');
-                btn.classList.replace('text-rose-700', 'text-slate-705');
-            }
-            lucide.createIcons();
         }
 
         // ================= 26 支 API 結構化原始數值與時序對照 =================
@@ -3006,6 +3015,236 @@ let btRange, hrRange, rrRange, painRange;
         }
 
         // ================= 右側欄精確定位功能 (Sticky Dock 連動) =================
+        const narrativeSummaryStore = {
+            'day-2': {
+                date: '2026/06/16 15:20 生成',
+                status: '歷史版本',
+                content: `
+                    <section class="rounded-xl border border-white/70 bg-white/75 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 01 — Who Is This Patient</h3>
+                        <p>王小明，68 歲，第三期大腸癌術後住院中，目前以術後恢復、疼痛控制與感染監測為主要交班重點。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/75 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 02 — Before You Touch Anything</h3>
+                        <p>Penicillin 過敏需留意用藥反應；目前無新增隔離或法定傳染病提示。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/75 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 03 — What Has Happened</h3>
+                        <p class="font-bold text-slate-800">入院診斷</p>
+                        <p>Colon Cancer, Stage III，術後生命徵象大致穩定，需持續觀察傷口與腸胃道恢復。</p>
+                        <p class="font-bold text-slate-800">皮膚/黏膜</p>
+                        <p>尾薦區壓瘡約 <button type="button" class="rounded bg-rose-100 px-1.5 py-0.5 font-bold text-rose-800 hover:bg-rose-200" onclick="focusNarrativeReference('wound', '皮膚/黏膜')">2x2 cm</button>，持續 Comfeel 覆蓋與翻身。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/75 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 04 — What Needs You Now</h3>
+                        <p>1. 接班後確認傷口敷料與翻身紀錄。</p>
+                        <p>2. 觀察晚間體溫與疼痛分數。</p>
+                    </section>
+                `
+            },
+            'day-1': {
+                date: '2026/06/17 16:05 生成',
+                status: '歷史版本',
+                content: `
+                    <section class="rounded-xl border border-white/70 bg-white/75 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 01 — Who Is This Patient</h3>
+                        <p>王小明，68 歲，第三期大腸癌術後第 7 天，今日交班重點是低度發燒後的感染追蹤與血糖波動。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/75 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 02 — Before You Touch Anything</h3>
+                        <p>Penicillin 過敏；感染警示以術後發燒與檢驗異常為主，需追蹤培養與抗生素反應。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/75 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 03 — What Has Happened</h3>
+                        <p class="font-bold text-slate-800">DMsheet</p>
+                        <p>飯前血糖開始上升，已依 sliding scale 給 RI，可點 <button type="button" class="rounded bg-indigo-100 px-1.5 py-0.5 font-bold text-indigo-800 hover:bg-indigo-200" onclick="focusNarrativeReference('sugar', 'DMsheet')">血糖趨勢</button> 對照。</p>
+                        <p class="font-bold text-slate-800">檢驗</p>
+                        <p>WBC 與 CRP 較前日升高，請與 <button type="button" class="rounded bg-emerald-100 px-1.5 py-0.5 font-bold text-emerald-800 hover:bg-emerald-200" onclick="focusNarrativeReference('lab', '檢驗異常')">檢驗趨勢</button> 一起看。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/75 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 04 — What Needs You Now</h3>
+                        <p>1. 追蹤血糖與發燒是否同向惡化。</p>
+                        <p>2. 若夜間 BT 再超過 38 度，回報值班醫師。</p>
+                    </section>
+                `
+            },
+            today: {
+                date: '2026/06/18 11:50 生成',
+                status: '已保存',
+                content: `
+                    <section class="rounded-xl border border-white/70 bg-white/80 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 01 — Who Is This Patient</h3>
+                        <p>王小明，68 歲，第三期大腸癌術後住院，這班最需要掌握的是術後感染風險、血糖突然拉高，以及尾薦區壓瘡照護。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/80 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 02 — Before You Touch Anything</h3>
+                        <p>Penicillin 過敏。VRE 陽性需接觸隔離；目前 WBC 14,200/uL、CRP 4.2 mg/dL，這些異常請先看 <button type="button" class="rounded bg-emerald-100 px-1.5 py-0.5 font-bold text-emerald-800 hover:bg-emerald-200" onclick="focusNarrativeReference('lab', '檢驗異常')">檢驗趨勢</button>。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/80 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 03 — What Has Happened</h3>
+                        <p class="font-bold text-slate-800">入院診斷</p>
+                        <p>Colon Cancer, Stage III，6/11 接受手術後持續住院觀察，可點 <button type="button" class="rounded bg-blue-100 px-1.5 py-0.5 font-bold text-blue-800 hover:bg-blue-200" onclick="focusNarrativeReference('tables', '入院診斷/經過')">結構化表格</button> 對照入院與用藥資料。</p>
+                        <p class="font-bold text-slate-800">DMsheet</p>
+                        <p>今日 07:00 飯前血糖 280 mg/dL，已依 sliding scale 給 RI 8U；請直接對照 <button type="button" class="rounded bg-indigo-100 px-1.5 py-0.5 font-bold text-indigo-800 hover:bg-indigo-200" onclick="focusNarrativeReference('sugar', 'DMsheet')">DMsheet 血糖圖</button>。</p>
+                        <p class="font-bold text-slate-800">會診</p>
+                        <p>感染科建議 blood culture x2 並持續 Cefazolin IV q8h，會診原文與翻譯可在 <button type="button" class="rounded bg-cyan-100 px-1.5 py-0.5 font-bold text-cyan-800 hover:bg-cyan-200" onclick="focusNarrativeReference('consult', '會診')">會診區</button> 對照。</p>
+                        <p class="font-bold text-slate-800">皮膚/黏膜</p>
+                        <p>尾薦區壓瘡仍需翻身與敷料照護，傷口時序請看 <button type="button" class="rounded bg-rose-100 px-1.5 py-0.5 font-bold text-rose-800 hover:bg-rose-200" onclick="focusNarrativeReference('wound', '皮膚/黏膜')">壓瘡照片/尺寸</button>。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/80 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 04 — What Needs You Now</h3>
+                        <p>1. 先追 BT、WBC/CRP 與血糖是否一起往上，必要時回報感染科建議。</p>
+                        <p>2. 14:00 前確認 8B12 轉床預約與交接床位狀態。</p>
+                        <p>3. 翻身時看尾薦區敷料是否完整，下一班要知道傷口沒有被漏掉。</p>
+                    </section>
+                `
+            }
+        };
+
+        Object.assign(narrativeSummaryStore, {
+            'day-2': {
+                date: '2026/06/16 15:20 生成',
+                status: '歷史版本',
+                content: `
+                    <section class="rounded-xl border border-white/70 bg-white/80 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 01 — Who Is This Patient</h3>
+                        <p>王小明，68 歲，Colon Cancer, Stage III 術後住院中，今天交班先抓住術後恢復、疼痛控制和傷口壓力照護這三件事。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/80 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 02 — Before You Touch Anything</h3>
+                        <p><span class="rounded bg-purple-100 px-1.5 py-0.5 font-bold text-purple-800">過敏提示</span> Penicillin 過敏，給藥前先核對；目前無新增法定傳染病提示。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/80 p-3 shadow-sm space-y-1.5">
+                        <h3 class="text-[11px] font-extrabold tracking-wide text-violet-800">ACT 03 — What Has Happened</h3>
+                        <p class="text-[10px] font-bold text-slate-400">入院診斷</p>
+                        <p>6/11 術後生命徵象大致穩定，疼痛仍和傷口拉扯有關；翻身時尾薦區有
+                            <button type="button" class="rounded bg-amber-100 px-1.5 py-0.5 font-extrabold text-amber-900 ring-1 ring-amber-200 transition hover:bg-amber-200" onclick="focusNarrativeReference('wound', '壓瘡紀錄')">一期壓瘡 2x2 cm</button>
+                            ，已貼 Comfeel，這個點交班時要直接看得到。
+                        </p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/80 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 04 — What Needs You Now</h3>
+                        <p>1. 接班先確認尾薦區敷料和翻身紀錄。</p>
+                        <p>2. 晚間若疼痛或體溫往上，請回頭對照生命徵象趨勢。</p>
+                    </section>
+                `
+            },
+            'day-1': {
+                date: '2026/06/17 16:05 生成',
+                status: '歷史版本',
+                content: `
+                    <section class="rounded-xl border border-white/70 bg-white/80 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 01 — Who Is This Patient</h3>
+                        <p>王小明，68 歲，第三期大腸癌術後第 7 天；今天開始要把術後發燒、發炎指標和血糖波動一起看。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/80 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 02 — Before You Touch Anything</h3>
+                        <p><span class="rounded bg-purple-100 px-1.5 py-0.5 font-bold text-purple-800">過敏提示</span> Penicillin 過敏；感染警示以術後發燒與檢驗異常為主。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/80 p-3 shadow-sm space-y-1.5">
+                        <h3 class="text-[11px] font-extrabold tracking-wide text-violet-800">ACT 03 — What Has Happened</h3>
+                        <p class="text-[10px] font-bold text-slate-400">DMsheet</p>
+                        <p>飯前血糖開始明顯上升，已依 sliding scale 給 RI；這個變化要和
+                            <button type="button" class="rounded bg-emerald-100 px-1.5 py-0.5 font-extrabold text-emerald-900 ring-1 ring-emerald-200 transition hover:bg-emerald-200" onclick="focusNarrativeReference('lab', 'WBC/CRP 趨勢')">WBC/CRP 上升</button>
+                            放在同一個臨床脈絡判斷。
+                        </p>
+                        <p class="text-[10px] font-bold text-slate-400">檢驗</p>
+                        <p>如果夜間再燒，請直接對照
+                            <button type="button" class="rounded bg-red-100 px-1.5 py-0.5 font-extrabold text-red-900 ring-1 ring-red-200 transition hover:bg-red-200" onclick="focusAndExpandChart('tpr', 'week', 'bt')">體溫趨勢</button>
+                            和血液培養回報，不要只看單一數值。
+                        </p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/80 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 04 — What Needs You Now</h3>
+                        <p>1. 追蹤血糖、體溫、WBC/CRP 是否同向變差。</p>
+                        <p>2. 若 BT 再超過 38 度，回報值班醫師並確認培養是否已送。</p>
+                    </section>
+                `
+            },
+            today: {
+                date: '2026/06/18 11:50 生成',
+                status: '已保存',
+                content: `
+                    <section class="rounded-xl border border-white/70 bg-white/85 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 01 — Who Is This Patient</h3>
+                        <p>王小明，68 歲，Colon Cancer, Stage III 術後住院；這班重點不是單看一個數字，而是術後感染風險、血糖突然拉高和尾薦區壓瘡正在同時需要照看。</p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/85 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 02 — Before You Touch Anything</h3>
+                        <p>
+                            <span class="rounded bg-purple-100 px-1.5 py-0.5 font-bold text-purple-800">過敏提示</span> Penicillin 過敏；
+                            <span class="rounded bg-orange-100 px-1.5 py-0.5 font-bold text-orange-800">隔離提示</span> VRE 陽性需接觸隔離。
+                            目前發炎指標是高的：
+                            <button type="button" class="rounded bg-red-100 px-1.5 py-0.5 font-extrabold text-red-900 ring-1 ring-red-200 transition hover:bg-red-200" onclick="focusNarrativeReference('lab', '檢驗異常')">WBC 14,200/uL、CRP 4.2 mg/dL</button>。
+                        </p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/85 p-3 shadow-sm space-y-1.5">
+                        <h3 class="text-[11px] font-extrabold tracking-wide text-violet-800">ACT 03 — What Has Happened</h3>
+                        <p class="text-[10px] font-bold text-slate-400">入院診斷</p>
+                        <p>6/11 做完乙狀結腸部分切除術後，原本恢復平穩，但今天晨間出現
+                            <button type="button" class="rounded bg-red-100 px-1.5 py-0.5 font-extrabold text-red-900 ring-1 ring-red-200 transition hover:bg-red-200" onclick="focusAndExpandChart('tpr', 'week', 'bt')">體溫急升至 38.2°C</button>
+                            ，伴隨輕微畏寒，已完成 blood culture 並開 Kefzol。
+                        </p>
+                        <p class="text-[10px] font-bold text-slate-400">DMsheet</p>
+                        <p>同一個時間軸上，今日 07:00 飯前血糖衝到
+                            <button type="button" class="rounded bg-red-100 px-1.5 py-0.5 font-extrabold text-red-900 ring-1 ring-red-200 transition hover:bg-red-200" onclick="focusNarrativeReference('sugar', 'DMsheet')">280 mg/dL</button>
+                            ，已依 sliding scale 給 RI 8U；這比較像感染壓力下的高血糖，要跟體溫和發炎指標一起交班。
+                        </p>
+                        <p class="text-[10px] font-bold text-slate-400">會診</p>
+                        <p>感染科建議
+                            <button type="button" class="rounded bg-cyan-100 px-1.5 py-0.5 font-extrabold text-cyan-900 ring-1 ring-cyan-200 transition hover:bg-cyan-200" onclick="focusNarrativeReference('consult', '感染科會診')">blood culture x2 並持續 Cefazolin IV q8h</button>
+                            ，明早要回頭看培養結果和體溫曲線。
+                        </p>
+                        <p class="text-[10px] font-bold text-slate-400">皮膚/黏膜</p>
+                        <p>尾薦區仍有
+                            <button type="button" class="rounded bg-amber-100 px-1.5 py-0.5 font-extrabold text-amber-900 ring-1 ring-amber-200 transition hover:bg-amber-200" onclick="focusNarrativeReference('wound', '壓瘡紀錄')">一期壓瘡 2x2 cm</button>
+                            ，已貼 Comfeel 並衛教每 2 小時翻身，這件事不要被感染追蹤蓋過去。
+                        </p>
+                    </section>
+                    <section class="rounded-xl border border-white/70 bg-white/85 p-3 shadow-sm">
+                        <h3 class="mb-1 text-[11px] font-extrabold tracking-wide text-violet-800">ACT 04 — What Needs You Now</h3>
+                        <p>1. 先追 BT、WBC/CRP、血糖是不是同向往上，必要時回報感染科建議。</p>
+                        <p>2. 14:00 前確認 8B12 轉床預約與交接床位狀態。</p>
+                        <p>3. 翻身時看尾薦區敷料是否完整，下一班要知道這個傷口沒有被漏掉。</p>
+                    </section>
+                `
+            }
+        });
+
+        function switchNarrativeSummary(dayKey = 'today') {
+            const summary = narrativeSummaryStore[dayKey] || narrativeSummaryStore.today;
+            const body = document.getElementById('narrative-summary-body');
+            const date = document.getElementById('narrative-summary-date');
+            const status = document.getElementById('narrative-summary-status');
+
+            if (!body || !date || !status) return;
+
+            body.innerHTML = summary.content;
+            date.innerText = summary.date;
+            status.innerHTML = `<i data-lucide="${dayKey === 'today' ? 'check-circle-2' : 'history'}" class="w-3.5 h-3.5"></i>${summary.status}`;
+
+            document.querySelectorAll('.narrative-day-btn').forEach((button) => {
+                const isActive = button.dataset.narrativeDay === dayKey;
+                button.className = isActive
+                    ? 'narrative-day-btn inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-[10px] font-bold text-blue-700 shadow-sm ring-1 ring-blue-100'
+                    : 'narrative-day-btn inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-slate-500 transition hover:bg-white hover:text-slate-900';
+            });
+
+            lucide.createIcons();
+        }
+
+        function focusNarrativeReference(chartId, label) {
+            const levelMap = {
+                sugar: '3days',
+                lab: 'full',
+                tables: '',
+                consult: '',
+                wound: ''
+            };
+            focusAndExpandChart(chartId, levelMap[chartId] || '');
+            showToast('已定位右側結構化資料', `${label} 可與 AI 摘要逐句對照。`);
+        }
+
         function scrollToMetric(elementId) {
             const rightContainer = document.getElementById('right-scroll-container');
             const targetElement = document.getElementById(elementId);
@@ -3179,6 +3418,7 @@ let btRange, hrRange, rrRange, painRange;
         // 頁面加載完成後初始化
         window.onload = function() {
             initAllCharts();
+            switchNarrativeSummary('today');
             initializeConsultTranslationBlocks();
             setupChartZoomButtons();
             bindChartZoomInteractions();
